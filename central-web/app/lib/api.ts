@@ -34,11 +34,10 @@ export interface DataAccessRequest {
 }
 
 class APIClient {
+  // For central-web, we use cookies - no need to get token from localStorage
   private getHeaders(): HeadersInit {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
     return {
       'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
     }
   }
 
@@ -46,6 +45,7 @@ class APIClient {
     const response = await fetch(`${API_BASE}/auth/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Include cookies
       body: JSON.stringify({ username, password }),
     })
 
@@ -60,6 +60,7 @@ class APIClient {
   async getPendingRegistrations(): Promise<Hospital[]> {
     const response = await fetch(`${API_BASE}/admin/registrations`, {
       headers: this.getHeaders(),
+      credentials: 'include', // Include cookies
     })
 
     if (!response.ok) {
@@ -73,6 +74,7 @@ class APIClient {
   async getAllHospitals(): Promise<Hospital[]> {
     const response = await fetch(`${API_BASE}/admin/hospitals`, {
       headers: this.getHeaders(),
+      credentials: 'include', // Include cookies
     })
 
     if (!response.ok) {
@@ -87,6 +89,7 @@ class APIClient {
     const response = await fetch(`${API_BASE}/admin/registrations/${hospitalId}/approve`, {
       method: 'PUT',
       headers: this.getHeaders(),
+      credentials: 'include', // Include cookies
     })
 
     if (!response.ok) {
@@ -101,6 +104,7 @@ class APIClient {
     const response = await fetch(`${API_BASE}/admin/registrations/${hospitalId}/reject`, {
       method: 'PUT',
       headers: this.getHeaders(),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -112,6 +116,7 @@ class APIClient {
   async getDataAccessRequests(): Promise<DataAccessRequest[]> {
     const response = await fetch(`${API_BASE}/requests`, {
       headers: this.getHeaders(),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -132,6 +137,7 @@ class APIClient {
     const response = await fetch(`${API_BASE}/requests`, {
       method: 'POST',
       headers: this.getHeaders(),
+      credentials: 'include',
       body: JSON.stringify(data),
     })
 
@@ -146,6 +152,7 @@ class APIClient {
   async getRequestStatus(requestId: string): Promise<DataAccessRequest> {
     const response = await fetch(`${API_BASE}/requests/${requestId}`, {
       headers: this.getHeaders(),
+      credentials: 'include',
     })
 
     if (!response.ok) {
@@ -156,14 +163,6 @@ class APIClient {
   }
 
   // Hospital-specific endpoints
-  private getHospitalHeaders(): HeadersInit {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('hospitalToken') : null
-    return {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-    }
-  }
-
   async hospitalRegister(name: string, email: string, password: string): Promise<{ message: string; hospital: Hospital }> {
     const response = await fetch(`${API_BASE}/hospitals/register`, {
       method: 'POST',
@@ -183,6 +182,7 @@ class APIClient {
     const response = await fetch(`${API_BASE}/auth/hospital/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', // Include cookies
       body: JSON.stringify({ email, password }),
     })
 
@@ -195,8 +195,9 @@ class APIClient {
   }
 
   async getHospitalStatus(): Promise<{ hospital: Hospital; timestamp: string }> {
-    const response = await fetch(`${API_BASE}/nodes/status`, {
-      headers: this.getHospitalHeaders(),
+    const response = await fetch(`${API_BASE}/hospitals/me`, {
+      headers: this.getHeaders(),
+      credentials: 'include', // Include cookies
     })
 
     if (!response.ok) {

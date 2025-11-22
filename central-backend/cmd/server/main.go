@@ -17,6 +17,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// Version information - update this with each deployment
+const (
+	Version     = "5"
+	BuildDate   = "2025-11-22"
+	Description = "Federated Hospital Data Lake - Central Control Plane"
+)
+
 func main() {
 	// Load configuration
 	cfg, err := config.Load()
@@ -27,7 +34,14 @@ func main() {
 	// Setup logging
 	setupLogging(cfg)
 
-	logrus.Info("Starting Central Control Plane...")
+	// Print version information
+	logrus.WithFields(logrus.Fields{
+		"version":     Version,
+		"build_date":  BuildDate,
+		"description": Description,
+	}).Info("Starting Central Control Plane...")
+
+	logrus.Infof("=== HMS Federated Data Lake - Central Backend v%s ===", Version)
 
 	// Initialize database
 	if err := database.Initialize(&cfg.Database); err != nil {
@@ -88,7 +102,12 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		logrus.Infof("Server listening on %s", addr)
+		// Print version information
+		logrus.WithFields(logrus.Fields{
+			"version":     Version,
+			"build_date":  BuildDate,
+			"description": Description,
+		}).Infof("Server listening on %s", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logrus.Fatalf("Server failed to start: %v", err)
 		}

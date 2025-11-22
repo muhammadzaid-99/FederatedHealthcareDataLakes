@@ -12,9 +12,11 @@ export default function HomePage() {
 
   useEffect(() => {
     // Check if already authenticated
-    const token = storage.getAccessToken();
+    const token = storage.getToken();
     if (token) {
       router.push('/dashboard');
+    } else {
+      router.push('/login');
     }
   }, [router]);
 

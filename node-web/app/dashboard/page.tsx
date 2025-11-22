@@ -6,7 +6,7 @@ import { api, storage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Database, FileText, LogOut, RefreshCw, Server, Settings } from 'lucide-react';
+import { Activity, Database, FileText, LogOut, MessageSquare, RefreshCw, Server, Settings, Workflow } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -16,22 +16,28 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
 
   const loadNodeStatus = async () => {
-    const token = storage.getAccessToken();
+    const token = storage.getToken();
     if (!token) {
-      router.push('/');
+      router.push('/login');
       return;
     }
 
     try {
       setRefreshing(true);
       const response = await api.getNodeStatus(token);
-      setHospitalInfo(response.hospital);
-      storage.setHospitalInfo(response.hospital);
+      setHospitalInfo(response.config);
+      storage.setUserInfo(response.config);
+      setError('');
     } catch (err: any) {
-      setError(err.message || 'Failed to load node status');
-      if (err.message.includes('401') || err.message.includes('unauthorized')) {
+      // If node is not configured yet, that's OK - just show empty state
+      if (err.message.includes('node not configured yet') || err.message.includes('404')) {
+        setHospitalInfo(null);
+        setError('');
+      } else if (err.message.includes('401') || err.message.includes('unauthorized')) {
         storage.clear();
-        router.push('/');
+        router.push('/login');
+      } else {
+        setError(err.message || 'Failed to load node status');
       }
     } finally {
       setLoading(false);
@@ -87,9 +93,11 @@ export default function DashboardPage() {
               <Activity className="h-8 w-8 text-blue-600 mr-3" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {hospitalInfo?.name || 'Hospital Node'}
+                  Hospital Node Portal
                 </h1>
-                <p className="text-sm text-gray-600">{hospitalInfo?.email}</p>
+                <p className="text-sm text-gray-600">
+                  {hospitalInfo?.handshake_done ? 'Connected' : 'Not Connected'}
+                </p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -117,7 +125,7 @@ export default function DashboardPage() {
 
       <div className="container mx-auto px-4 py-8">
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/requests')}>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -130,107 +138,143 @@ export default function DashboardPage() {
             </CardHeader>
           </Card>
 
-          <Card>
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/queue-viewer')}>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Database className="h-5 w-5 mr-2 text-green-600" />
-                Storage
+                <MessageSquare className="h-5 w-5 mr-2 text-orange-600" />
+                Queue Viewer
               </CardTitle>
               <CardDescription>
-                MinIO: {hospitalInfo?.minio_endpoint || 'Not configured'}
+                Monitor RabbitMQ messages in real-time
               </CardDescription>
             </CardHeader>
           </Card>
 
-          <Card>
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/etl/config')}>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Server className="h-5 w-5 mr-2 text-purple-600" />
-                Catalog
+                <Workflow className="h-5 w-5 mr-2 text-purple-600" />
+                ETL Config
               </CardTitle>
               <CardDescription>
-                Nessie: {hospitalInfo?.nessie_namespace || 'Not configured'}
+                Configure data extraction and transformation
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/etl/jobs')}>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Database className="h-5 w-5 mr-2 text-cyan-600" />
+                ETL Jobs
+              </CardTitle>
+              <CardDescription>
+                Monitor ETL job executions
               </CardDescription>
             </CardHeader>
           </Card>
         </div>
 
-        {/* Node Status */}
+        {/* Second row */}
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/handshake')}>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Settings className="h-5 w-5 mr-2 text-green-600" />
+                Configuration
+              </CardTitle>
+              <CardDescription>
+                {hospitalInfo?.handshake_done ? 'Update node settings' : 'Configure node'}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Server className="h-5 w-5 mr-2 text-indigo-600" />
+                Status
+              </CardTitle>
+              <CardDescription>
+                {hospitalInfo?.handshake_done ? (
+                  <Badge variant="default">Active</Badge>
+                ) : (
+                  <Badge variant="secondary">Not Configured</Badge>
+                )}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+
+        {/* Node Configuration Status */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Node Status</CardTitle>
-            <CardDescription>Current configuration and capabilities</CardDescription>
+            <CardTitle>Node Configuration</CardTitle>
+            <CardDescription>Current node settings and status</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">General Information</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Node ID:</span>
-                    <span className="text-sm font-mono">{hospitalInfo?.id?.slice(0, 8)}...</span>
+            {hospitalInfo?.handshake_done ? (
+              <div className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Connection Details</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-sm text-gray-600">Client ID:</span>
+                        <span className="text-sm font-mono">{hospitalInfo?.client_id}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-sm text-gray-600">Queue Name:</span>
+                        <span className="text-sm font-mono">{hospitalInfo?.queue_name || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-sm text-gray-600">Nessie Namespace:</span>
+                        <span className="text-sm font-mono">{hospitalInfo?.nessie_namespace || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-sm text-gray-600">Handshake Status:</span>
+                        <Badge variant="default">Connected</Badge>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Status:</span>
-                    <Badge variant={hospitalInfo?.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                      {hospitalInfo?.status}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Client ID:</span>
-                    <span className="text-sm font-mono">{hospitalInfo?.client_id?.slice(0, 12)}...</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b">
-                    <span className="text-sm text-gray-600">Queue Name:</span>
-                    <span className="text-sm font-mono">{hospitalInfo?.queue_name}</span>
-                  </div>
-                </div>
-              </div>
 
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Capabilities</h3>
-                {hospitalInfo?.capabilities ? (
-                  <div className="space-y-2">
-                    {Object.entries(hospitalInfo.capabilities).map(([key, value]: [string, any]) => (
-                      <div key={key} className="flex justify-between py-2 border-b">
-                        <span className="text-sm text-gray-600 capitalize">
-                          {key.replace(/_/g, ' ')}:
-                        </span>
-                        <span className="text-sm font-medium">
-                          {Array.isArray(value) ? value.join(', ') : String(value)}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Timestamps</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between py-2 border-b">
+                        <span className="text-sm text-gray-600">Configured At:</span>
+                        <span className="text-sm">
+                          {hospitalInfo?.configured_at ? new Date(hospitalInfo.configured_at).toLocaleString("en-PK") : 'N/A'}
                         </span>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No capabilities configured</p>
-                )}
-              </div>
-            </div>
+                </div>
 
-            {/* Timestamps */}
-            <div className="mt-6 pt-6 border-t">
-              <div className="grid md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">Created:</span>
-                  <p className="font-medium">
-                    {hospitalInfo?.created_at ? new Date(hospitalInfo.created_at).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Handshake:</span>
-                  <p className="font-medium">
-                    {hospitalInfo?.handshake_at ? new Date(hospitalInfo.handshake_at).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Last Updated:</span>
-                  <p className="font-medium">
-                    {hospitalInfo?.updated_at ? new Date(hospitalInfo.updated_at).toLocaleDateString() : 'N/A'}
-                  </p>
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <Button onClick={() => router.push('/handshake')} variant="outline" className="flex-1">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Reconfigure / Re-handshake
+                  </Button>
+                  <Button onClick={loadNodeStatus} variant="outline">
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-center py-8">
+                <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Node Not Configured</h3>
+                <p className="text-gray-600 mb-6">
+                  You need to configure your node with credentials from the central portal before you can start using it.
+                </p>
+                <Button onClick={() => router.push('/handshake')}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configure Node
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

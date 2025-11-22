@@ -66,6 +66,7 @@ func (h *HospitalHandler) GetPendingRegistrations(c *gin.Context) {
 }
 
 // ApproveRegistration approves a hospital registration (admin only)
+// NOTE: This no longer generates client_secret - hospital must generate it themselves after login
 func (h *HospitalHandler) ApproveRegistration(c *gin.Context) {
 	hospitalIDStr := c.Param("id")
 	hospitalID, err := uuid.Parse(hospitalIDStr)
@@ -76,7 +77,7 @@ func (h *HospitalHandler) ApproveRegistration(c *gin.Context) {
 
 	adminID, _ := c.Get("user_id")
 
-	hospital, clientSecret, err := h.hospitalService.ApproveHospital(hospitalID, adminID.(string))
+	hospital, err := h.hospitalService.ApproveHospitalWithoutCredentials(hospitalID, adminID.(string))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -93,18 +94,15 @@ func (h *HospitalHandler) ApproveRegistration(c *gin.Context) {
 		nil,
 	)
 
-	// IMPORTANT: This is the ONLY time the plain-text client_secret is returned
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Hospital approved successfully",
+		"message": "Hospital approved successfully. Hospital can now login and generate their client secret.",
 		"hospital": gin.H{
 			"id":               hospital.ID,
 			"name":             hospital.Name,
-			"client_id":        hospital.ClientID,
-			"client_secret":    clientSecret, // ONLY RETURNED ONCE
+			"status":           hospital.Status,
 			"nessie_namespace": hospital.NessieNamespace,
 			"queue_name":       hospital.QueueName,
 		},
-		"warning": "Store the client_secret securely. It will not be shown again.",
 	})
 }
 
@@ -207,8 +205,8 @@ func (h *HospitalHandler) Handshake(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT for future API calls
-	token, err := authService.GenerateJWT(hospital.ID.String(), "hospital", hospital.AdminEmail)
+	// Generate JWT for future API calls with user_type="node"
+	token, err := authService.GenerateJWT(hospital.ID.String(), "node", hospital.AdminEmail)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
@@ -220,7 +218,7 @@ func (h *HospitalHandler) Handshake(c *gin.Context) {
 		hospital.ID.String(),
 		"handshake",
 		hospital.ID.String(),
-		"hospital",
+		"node",
 		c.ClientIP(),
 		nil,
 	)
@@ -237,7 +235,8 @@ func (h *HospitalHandler) Handshake(c *gin.Context) {
 	})
 }
 
-// GetNodeStatus returns the status of the authenticated node
+// GetNodeStatus returns the status of the authenticated node (external system)
+// Used by node-web after authentication with client credentials
 func (h *HospitalHandler) GetNodeStatus(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	hospitalID, err := uuid.Parse(userID.(string))
@@ -273,7 +272,107 @@ func (h *HospitalHandler) GetNodeStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"node":      response,
+		"timestamp": time.Now(),
+	})
+}
+
+// GetHospitalStatus returns the status of the authenticated hospital (central portal user)
+// Used by central-web hospital dashboard
+func (h *HospitalHandler) GetHospitalStatus(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	hospitalID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hospital ID"})
+		return
+	}
+
+	hospital, err := h.hospitalService.GetHospitalByID(hospitalID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "hospital not found"})
+		return
+	}
+
+	response := gin.H{
+		"id":               hospital.ID,
+		"name":             hospital.Name,
+		"email":            hospital.AdminEmail,
+		"status":           hospital.Status,
+		"nessie_namespace": hospital.NessieNamespace,
+		"queue_name":       hospital.QueueName,
+		"created_at":       hospital.CreatedAt,
+		"updated_at":       hospital.UpdatedAt,
+	}
+
+	// Include client_id if credentials are issued
+	if hospital.ClientID != nil {
+		response["client_id"] = *hospital.ClientID
+	}
+
+	c.JSON(http.StatusOK, gin.H{
 		"hospital":  response,
 		"timestamp": time.Now(),
+	})
+}
+
+// GenerateClientSecret generates client credentials for an approved hospital
+// Requires password verification - this is the ONLY time client_secret is shown
+func (h *HospitalHandler) GenerateClientSecret(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	hospitalID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hospital ID"})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "password is required"})
+		return
+	}
+
+	// Verify password first
+	authService := c.MustGet("authService").(*services.AuthService)
+	hospital, err := h.hospitalService.GetHospitalByID(hospitalID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "hospital not found"})
+		return
+	}
+
+	// Authenticate using email and password
+	_, err = authService.AuthenticateHospitalByEmail(hospital.AdminEmail, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid password"})
+		return
+	}
+
+	// Generate new credentials
+	clientID, clientSecret, err := h.hospitalService.GenerateClientCredentials(hospitalID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Audit log
+	h.auditService.LogWithActor(
+		"hospital",
+		hospital.ID.String(),
+		"generate_credentials",
+		hospitalID.String(),
+		"hospital",
+		c.ClientIP(),
+		nil,
+	)
+
+	// Return credentials along with queue info for node-backend setup
+	c.JSON(http.StatusOK, gin.H{
+		"message":          "Client credentials generated successfully. Use these in your node backend to complete handshake.",
+		"client_id":        clientID,
+		"client_secret":    clientSecret, // ONLY SHOWN ONCE
+		"queue_name":       hospital.QueueName,
+		"nessie_namespace": hospital.NessieNamespace,
 	})
 }

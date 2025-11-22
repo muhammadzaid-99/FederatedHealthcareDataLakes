@@ -25,6 +25,7 @@ export default function HospitalLoginPage() {
       const response = await fetch('http://localhost:8080/api/v1/auth/hospital/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: This allows cookies to be set
         body: JSON.stringify(formData)
       })
 
@@ -35,10 +36,8 @@ export default function HospitalLoginPage() {
 
       const data = await response.json()
       
-      // Store token in localStorage
-      localStorage.setItem('hospitalToken', data.token)
-      
-      // Redirect to hospital dashboard
+      // Cookie is automatically set by browser - no need to store token manually
+      // Just redirect to dashboard
       router.push('/hospital/dashboard')
     } catch (err: any) {
       setError(err.message || 'Failed to login')
