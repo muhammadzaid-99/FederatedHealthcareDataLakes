@@ -4,33 +4,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORS middleware handles Cross-Origin Resource Sharing
-// When using credentials, we CANNOT use wildcard (*) origin
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// For development: allow localhost origins
-		// For production: whitelist specific domains
-		allowedOrigins := []string{
-			"http://localhost:3000", // central-web
-			"http://localhost:3001", // node-web
+		// Allow requests from node-web
+		allowedOrigins := map[string]bool{
+			"http://localhost:3001": true,
+			"http://localhost:3002": true,
 		}
 
-		// Check if origin is allowed
-		isAllowed := false
-		for _, allowed := range allowedOrigins {
-			if origin == allowed {
-				isAllowed = true
-				break
-			}
-		}
-
-		if isAllowed {
+		if allowedOrigins[origin] {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 

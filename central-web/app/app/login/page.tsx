@@ -22,7 +22,7 @@ export default function LoginPage() {
 
     try {
       const response = await api.adminLogin(username, password)
-      localStorage.setItem('authToken', response.token)
+      // Cookie is set automatically - no need to store token
       router.push('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.')

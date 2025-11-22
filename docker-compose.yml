@@ -39,6 +39,26 @@ services:
     networks:
       - central-network
 
+  # PostgreSQL Database for Node Backend
+  postgres-node:
+    image: postgres:latest
+    container_name: node-postgres
+    environment:
+      POSTGRES_DB: node_db
+      POSTGRES_USER: node_user
+      POSTGRES_PASSWORD: node_password
+    ports:
+      - "5434:5432"  # Using different port to avoid conflict
+    volumes:
+      - node_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U node_user -d node_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - central-network
+
   # RabbitMQ Message Broker
   rabbitmq:
     image: rabbitmq:3-management
@@ -124,6 +144,34 @@ services:
       - central-network
     restart: unless-stopped
 
+  # Node Backend (Middleware for Hospital Nodes)
+  node-backend:
+    build:
+      context: ./node-backend
+      dockerfile: Dockerfile
+    container_name: node-backend-app
+    environment:
+      NODE_PORT: 9090
+      NODE_ENV: development
+      NODE_DB_HOST: postgres-node
+      NODE_DB_PORT: 5432
+      NODE_DB_USER: node_user
+      NODE_DB_PASSWORD: node_password
+      NODE_DB_NAME: node_db
+      NODE_DB_SSLMODE: disable
+      CENTRAL_BACKEND_URL: http://central-backend:8080
+      NODE_JWT_SECRET: node-jwt-secret-change-in-production
+    ports:
+      - "9090:9090"
+    depends_on:
+      postgres-node:
+        condition: service_healthy
+      central-backend:
+        condition: service_started
+    networks:
+      - central-network
+    restart: unless-stopped
+
   # Central Web (Admin Portal Frontend)
   # central-web:
   #   build:
@@ -161,6 +209,7 @@ services:
 volumes:
   postgres_data:
   nessie_postgres_data:
+  node_postgres_data:
   rabbitmq_data:
 
 networks:

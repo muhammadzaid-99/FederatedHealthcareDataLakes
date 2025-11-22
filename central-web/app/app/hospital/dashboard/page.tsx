@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import { 
   Building2, 
   Key, 
@@ -15,7 +16,11 @@ import {
   Copy,
   LogOut,
   AlertCircle,
-  FileText
+  FileText,
+  Loader2,
+  ShieldCheck,
+  Eye,
+  RefreshCw
 } from 'lucide-react'
 
 interface HospitalInfo {
@@ -38,30 +43,38 @@ export default function HospitalDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  
+  // Generate credentials modal states
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [password, setPassword] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState('')
+  const [newCredentials, setNewCredentials] = useState<{
+    client_id: string
+    client_secret: string
+  } | null>(null)
 
   useEffect(() => {
     loadHospitalInfo()
   }, [])
 
   const loadHospitalInfo = async () => {
-    const token = localStorage.getItem('hospitalToken')
-    
-    if (!token) {
-      router.push('/hospital/login')
-      return
-    }
-
     try {
-      const response = await fetch('http://localhost:8080/api/v1/nodes/status', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await fetch('http://localhost:8080/api/v1/hospitals/me', {
+        credentials: 'include' // Include cookies in request
       })
 
       if (!response.ok) {
+        // Log the full error response for debugging
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Hospital info error:', response.status, errorData)
+        
         if (response.status === 401) {
-          localStorage.removeItem('hospitalToken')
           router.push('/hospital/login')
+          return
+        }
+        if (response.status === 403) {
+          setError(`Access forbidden. Debug info: ${JSON.stringify(errorData)}`)
           return
         }
         throw new Error('Failed to load hospital information')
@@ -79,14 +92,78 @@ export default function HospitalDashboardPage() {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('hospitalToken')
-    router.push('/hospital/login')
+    // Call logout endpoint to clear cookie
+    fetch('http://localhost:8080/api/v1/auth/hospital/logout', {
+      method: 'POST',
+      credentials: 'include'
+    }).finally(() => {
+      router.push('/hospital/login')
+    })
   }
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text)
     setCopiedField(field)
     setTimeout(() => setCopiedField(null), 2000)
+  }
+
+  const handleGenerateSecret = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGenerating(true)
+    setGenerateError('')
+
+    try {
+      const response = await fetch('http://localhost:8080/api/v1/hospitals/me/generate-credentials', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include', // Include cookies
+        body: JSON.stringify({ password })
+      })
+
+      // Get response text first to debug JSON parse issues
+      const responseText = await response.text()
+      console.log('Response status:', response.status)
+      console.log('Response text:', responseText)
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to generate credentials'
+        try {
+          const data = JSON.parse(responseText)
+          errorMessage = data.error || errorMessage
+        } catch (e) {
+          console.error('Failed to parse error response:', e)
+          errorMessage = responseText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
+
+      // Parse the successful response
+      const data = JSON.parse(responseText)
+      console.log('Parsed data:', data)
+      
+      setNewCredentials({
+        client_id: data.client_id,
+        client_secret: data.client_secret
+      })
+      
+      // Reload hospital info to update status
+      await loadHospitalInfo()
+      
+      setPassword('')
+    } catch (err: any) {
+      setGenerateError(err.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const closeGenerateModal = () => {
+    setShowGenerateModal(false)
+    setPassword('')
+    setGenerateError('')
+    setNewCredentials(null)
   }
 
   const getStatusBadge = (status: string) => {
@@ -260,7 +337,7 @@ export default function HospitalDashboardPage() {
         </Card>
 
         {/* Credentials Card */}
-        {(hospital.status === 'CREDENTIALS_ISSUED' || hospital.status === 'ACTIVE') && hospital.client_id && (
+        {(hospital.status === 'ACTIVE' || hospital.status === 'CREDENTIALS_ISSUED') && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -272,87 +349,197 @@ export default function HospitalDashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="w-4 h-4 text-blue-600" />
-                  <p className="text-sm font-medium text-blue-900">
-                    Important: Keep these credentials secure
-                  </p>
-                </div>
-                <p className="text-xs text-blue-800">
-                  These credentials provide access to your hospital's data infrastructure. Never share them publicly.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">
-                    Client ID
-                  </label>
-                  <div className="flex gap-2">
-                    <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
-                      {hospital.client_id}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyToClipboard(hospital.client_id!, 'client_id')}
-                    >
-                      {copiedField === 'client_id' ? (
-                        <CheckCircle className="w-4 h-4 text-green-600" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
+              {!hospital.client_id ? (
+                /* No credentials yet - show generate button */
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ShieldCheck className="w-5 h-5 text-blue-600" />
+                      <p className="font-medium text-blue-900">
+                        Generate Your Client Credentials
+                      </p>
+                    </div>
+                    <p className="text-sm text-blue-800 mb-4">
+                      Your hospital has been approved! Generate your client credentials to connect your node to the federated network.
+                    </p>
+                    <Button onClick={() => setShowGenerateModal(true)} className="w-full">
+                      <Key className="w-4 h-4 mr-2" />
+                      Generate Client Credentials
                     </Button>
                   </div>
-                </div>
 
-                {hospital.client_secret && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">
-                      Client Secret
-                    </label>
-                    <div className="flex gap-2">
-                      <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
-                        {hospital.client_secret}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(hospital.client_secret!, 'client_secret')}
-                      >
-                        {copiedField === 'client_secret' ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
+                  {/* Show namespace and queue even without credentials */}
+                  {hospital.nessie_namespace && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Nessie Namespace
+                      </label>
+                      <div className="flex gap-2">
+                        <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
+                          {hospital.nessie_namespace}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(hospital.nessie_namespace!, 'nessie')}
+                        >
+                          {copiedField === 'nessie' ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {hospital.nessie_namespace && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">
-                      Nessie Namespace
-                    </label>
-                    <code className="block bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
-                      {hospital.nessie_namespace}
-                    </code>
+                  {hospital.queue_name && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        RabbitMQ Queue
+                      </label>
+                      <div className="flex gap-2">
+                        <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
+                          {hospital.queue_name}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(hospital.queue_name!, 'queue')}
+                        >
+                          {copiedField === 'queue' ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Has credentials - show them with view/regenerate option */
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle className="w-4 h-4 text-blue-600" />
+                      <p className="text-sm font-medium text-blue-900">
+                        Important: Keep these credentials secure
+                      </p>
+                    </div>
+                    <p className="text-xs text-blue-800">
+                      These credentials provide access to your hospital's data infrastructure. Never share them publicly.
+                    </p>
                   </div>
-                )}
 
-                {hospital.queue_name && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">
-                      RabbitMQ Queue
-                    </label>
-                    <code className="block bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
-                      {hospital.queue_name}
-                    </code>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Client ID
+                      </label>
+                      <div className="flex gap-2">
+                        <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
+                          {hospital.client_id}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(hospital.client_id!, 'client_id')}
+                        >
+                          {copiedField === 'client_id' ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Client Secret
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm flex items-center">
+                          <span className="text-gray-600 flex-1">
+                            ••••••••••••••••••••••••••••••••
+                          </span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            (encrypted)
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowGenerateModal(true)}
+                          title="View secret (requires password)"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowGenerateModal(true)}
+                          title="Regenerate credentials"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Click the eye icon to view or regenerate your secret (password required)
+                      </p>
+                    </div>
+
+                    {hospital.nessie_namespace && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 block mb-1">
+                          Nessie Namespace
+                        </label>
+                        <div className="flex gap-2">
+                          <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
+                            {hospital.nessie_namespace}
+                          </code>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(hospital.nessie_namespace!, 'nessie')}
+                          >
+                            {copiedField === 'nessie' ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {hospital.queue_name && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 block mb-1">
+                          RabbitMQ Queue
+                        </label>
+                        <div className="flex gap-2">
+                          <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
+                            {hospital.queue_name}
+                          </code>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(hospital.queue_name!, 'queue')}
+                          >
+                            {copiedField === 'queue' ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -379,6 +566,154 @@ export default function HospitalDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Generate/View Credentials Modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5" />
+                {newCredentials ? 'Credentials Generated' : hospital.client_id ? 'Generate New Credentials' : 'Generate Client Credentials'}
+              </CardTitle>
+              <CardDescription>
+                {newCredentials 
+                  ? 'Save these credentials securely - they will not be shown again' 
+                  : 'Verify your password to generate client credentials'
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!newCredentials ? (
+                <form onSubmit={handleGenerateSecret} className="space-y-4">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Important:</strong> The client secret will only be shown once. Make sure to save it securely.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-2">
+                      Confirm Your Password
+                    </label>
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your hospital password"
+                      required
+                      disabled={generating}
+                      autoFocus
+                    />
+                  </div>
+
+                  {generateError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-800">{generateError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeGenerateModal}
+                      disabled={generating}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={generating || !password}
+                      className="flex-1"
+                    >
+                      {generating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Key className="w-4 h-4 mr-2" />
+                          Generate
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <p className="text-sm font-medium text-green-900">
+                        Credentials Generated Successfully
+                      </p>
+                    </div>
+                    <p className="text-xs text-green-800">
+                      Save these credentials now - they won't be shown again!
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Client ID
+                      </label>
+                      <div className="flex gap-2">
+                        <code className="flex-1 bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
+                          {newCredentials.client_id}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(newCredentials.client_id, 'gen_client_id')}
+                        >
+                          {copiedField === 'gen_client_id' ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1">
+                        Client Secret <span className="text-red-600">(SAVE THIS NOW!)</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <code className="flex-1 bg-yellow-50 border border-yellow-300 px-3 py-2 rounded text-sm font-mono break-all">
+                          {newCredentials.client_secret}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => copyToClipboard(newCredentials.client_secret, 'gen_client_secret')}
+                        >
+                          {copiedField === 'gen_client_secret' ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-red-600 mt-1">
+                        This is the only time you'll see this secret. Store it securely!
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button onClick={closeGenerateModal} className="w-full">
+                    I've Saved These Credentials
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

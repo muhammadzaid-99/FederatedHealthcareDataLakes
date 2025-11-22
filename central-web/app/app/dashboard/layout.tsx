@@ -14,16 +14,41 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken')
-    if (!token) {
-      router.push('/login')
-    } else {
-      setLoading(false)
-    }
+    // Check authentication by making a test API call
+    // Since we use httpOnly cookies, we can't check localStorage
+    checkAuth()
   }, [router])
 
-  const handleLogout = () => {
-    localStorage.removeItem('authToken')
+  const checkAuth = async () => {
+    try {
+      // Try to fetch hospitals - if cookie is valid, this will succeed
+      const response = await fetch('http://localhost:8080/api/v1/admin/hospitals', {
+        credentials: 'include'
+      })
+      
+      if (!response.ok) {
+        // Not authenticated - redirect to login
+        router.push('/login')
+        return
+      }
+      
+      // Authenticated - show dashboard
+      setLoading(false)
+    } catch (error) {
+      // Network error or not authenticated
+      router.push('/login')
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('http://localhost:8080/api/v1/auth/admin/logout', {
+        method: 'POST',
+        credentials: 'include'
+      })
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
     router.push('/login')
   }
 

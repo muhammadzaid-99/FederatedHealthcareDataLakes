@@ -1,22 +1,84 @@
-// API Base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// API Base URL - Points to node-backend middleware
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9090';
 
-// API client for node-web
+// API client for node-web - All requests go through node-backend
 export const api = {
-  // Node Handshake
-  async handshake(data: {
-    client_id: string;
-    client_secret: string;
-    minio_endpoint: string;
-    capabilities?: Record<string, any>;
-    metadata?: Record<string, any>;
+  // Login to node-backend (node-web user authentication)
+  async login(username: string, password: string) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Important for httpOnly cookies if implemented
+      body: JSON.stringify({
+        username,
+        password,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Login failed');
+    }
+
+    return response.json();
+  },
+
+  // Register new node-web user
+  async register(data: {
+    username: string;
+    email: string;
+    password: string;
+    role?: string;
   }) {
-    const response = await fetch(`${API_BASE_URL}/api/v1/nodes/handshake`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Registration failed');
+    }
+
+    return response.json();
+  },
+
+  // Save node configuration (client credentials from central-web)
+  async saveConfig(token: string, data: {
+    client_id: string;
+    client_secret: string;
+    queue_name: string;
+    nessie_namespace?: string;
+  }) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to save configuration');
+    }
+
+    return response.json();
+  },
+
+  // Perform handshake with central-backend (via node-backend)
+  async handshake(token: string) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/handshake`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
     });
 
     if (!response.ok) {
@@ -27,11 +89,11 @@ export const api = {
     return response.json();
   },
 
-  // Get Node Status
-  async getNodeStatus(accessToken: string) {
-    const response = await fetch(`${API_BASE_URL}/api/v1/nodes/status`, {
+  // Get Node Status (from node-backend, which has stored config)
+  async getNodeStatus(token: string) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/node/status`, {
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${token}`,
       },
     });
 
@@ -43,62 +105,79 @@ export const api = {
     return response.json();
   },
 
-  // Get All Requests (for the authenticated hospital node)
-  async getRequests(accessToken: string, status?: string) {
-    const url = new URL(`${API_BASE_URL}/api/v1/requests`);
-    if (status) {
-      url.searchParams.append('status', status);
-    }
-
-    const response = await fetch(url.toString(), {
+  // Refresh status from central-backend
+  async refreshStatus(token: string) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/node/refresh`, {
+      method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${token}`,
       },
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch requests');
+      throw new Error(error.error || 'Failed to refresh status');
     }
 
     return response.json();
   },
 
-  // Get Single Request
-  async getRequest(accessToken: string, requestId: string) {
-    const response = await fetch(`${API_BASE_URL}/api/v1/requests/${requestId}`, {
+  // Get RabbitMQ messages
+  async getMessages(token: string) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/messages`, {
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${token}`,
       },
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch request');
+      throw new Error(error.error || 'Failed to fetch messages');
     }
 
     return response.json();
   },
 
-  // Submit Response to a Request
-  async submitResponse(accessToken: string, requestId: string, data: {
-    status: 'APPROVED' | 'REJECTED';
-    presigned_url?: string;
-    notes?: string;
-    valid_hours?: number;
-  }) {
-    const response = await fetch(`${API_BASE_URL}/api/v1/requests/${requestId}/responses`, {
+  // Generic GET method for authenticated requests
+  async get(endpoint: string) {
+    const token = storage.getToken();
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/v1${endpoint}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Request failed');
+    }
+
+    return response.json();
+  },
+
+  // Generic POST method for authenticated requests
+  async post(endpoint: string, data?: any) {
+    const token = storage.getToken();
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/v1${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify(data),
+      body: data ? JSON.stringify(data) : undefined,
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Failed to submit response');
+      throw new Error(error.error || 'Request failed');
     }
 
     return response.json();
@@ -107,49 +186,66 @@ export const api = {
 
 // Local storage helpers for node-web
 export const storage = {
-  setAccessToken(token: string) {
+  // Store JWT token from node-backend
+  setToken(token: string) {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('node_access_token', token);
+      localStorage.setItem('node_web_token', token);
     }
   },
 
-  getAccessToken(): string | null {
+  getToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('node_access_token');
+      return localStorage.getItem('node_web_token');
     }
     return null;
   },
 
-  removeAccessToken() {
+  removeToken() {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('node_access_token');
+      localStorage.removeItem('node_web_token');
     }
   },
 
-  setHospitalInfo(info: any) {
+  // Store user info
+  setUserInfo(info: any) {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('hospital_info', JSON.stringify(info));
+      localStorage.setItem('node_web_user', JSON.stringify(info));
     }
   },
 
-  getHospitalInfo(): any | null {
+  getUserInfo(): any | null {
     if (typeof window !== 'undefined') {
-      const info = localStorage.getItem('hospital_info');
+      const info = localStorage.getItem('node_web_user');
       return info ? JSON.parse(info) : null;
     }
     return null;
   },
 
-  removeHospitalInfo() {
+  removeUserInfo() {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('hospital_info');
+      localStorage.removeItem('node_web_user');
     }
+  },
+
+  // Store node configuration status
+  setConfigStatus(configured: boolean) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('node_configured', configured.toString());
+    }
+  },
+
+  isConfigured(): boolean {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('node_configured') === 'true';
+    }
+    return false;
   },
 
   clear() {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('node_access_token');
-      localStorage.removeItem('hospital_info');
+      localStorage.removeItem('node_web_token');
+      localStorage.removeItem('node_web_user');
+      localStorage.removeItem('node_configured');
     }
   },
 };
