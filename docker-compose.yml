@@ -1,0 +1,168 @@
+services:
+  # PostgreSQL Database
+  postgres-central:
+    image: postgres:latest
+    container_name: central-postgres
+    environment:
+      POSTGRES_DB: centraldb
+      POSTGRES_USER: central
+      POSTGRES_PASSWORD: centralpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U central -d centraldb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - central-network
+
+  # PostgreSQL Database for Nessie
+  postgres-nessie:
+    image: postgres:latest
+    container_name: nessie-postgres
+    environment:
+      POSTGRES_DB: nessie
+      POSTGRES_USER: nessie
+      POSTGRES_PASSWORD: nessiepass
+    ports:
+      - "5433:5432"  # Using different port to avoid conflict
+    volumes:
+      - nessie_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nessie -d nessie"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - central-network
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: central-rabbitmq
+    hostname: central-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_ERLANG_COOKIE: 'SWQOKODSQALRPCLNMEQG'
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - central-network
+
+  # Project Nessie - Metadata Catalog with PostgreSQL Backend
+  nessie:
+    image: ghcr.io/projectnessie/nessie:latest
+    container_name: central-nessie
+    environment:
+      QUARKUS_HTTP_PORT: 19120
+      # Use PostgreSQL instead of in-memory storage
+      NESSIE_VERSION_STORE_TYPE: JDBC
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres-nessie:5432/nessie
+      QUARKUS_DATASOURCE_USERNAME: nessie
+      QUARKUS_DATASOURCE_PASSWORD: nessiepass
+    ports:
+      - "19120:19120"
+    depends_on:
+      postgres-nessie:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19120/api/v2/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - central-network
+
+  # Central Control Plane Application (Backend)
+  central-backend:
+    build:
+      context: ./central-backend
+      dockerfile: Dockerfile
+    container_name: central-backend-app
+    environment:
+      DB_HOST: postgres-central
+      DB_PORT: 5432
+      DB_NAME: centraldb
+      DB_USER: central
+      DB_PASSWORD: centralpass
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      NESSIE_ENDPOINT: http://nessie:19120
+      NESSIE_DEFAULT_BRANCH: main
+      APP_PORT: 8080
+      APP_ENV: development
+      JWT_SECRET: dev-secret-key-change-in-production
+      JWT_EXPIRATION_HOURS: 24
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nessie:
+        condition: service_healthy
+    networks:
+      - central-network
+    restart: unless-stopped
+
+  # Central Web (Admin Portal Frontend)
+  # central-web:
+  #   build:
+  #     context: ./central-web
+  #     dockerfile: Dockerfile
+  #   container_name: central-web-app
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://central-backend:8080
+  #     NODE_ENV: production
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - central-backend
+  #   networks:
+  #     - central-network
+  #   restart: unless-stopped
+
+  # Node Web (Hospital Node Portal Frontend)
+  # node-web:
+  #   build:
+  #     context: ./node-web
+  #     dockerfile: Dockerfile
+  #   container_name: node-web-app
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://central-backend:8080
+  #     NODE_ENV: production
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     - central-backend
+  #   networks:
+  #     - central-network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+  nessie_postgres_data:
+  rabbitmq_data:
+
+networks:
+  central-network:
+    driver: bridge

@@ -1,0 +1,197 @@
+##########################################################
+# HMS-DLS2 Monorepo .gitignore
+# Comprehensive ignore file for all 4 applications
+##########################################################
+
+##########################################################
+# DEPENDENCIES - Never commit node_modules or vendor
+##########################################################
+node_modules/
+*/node_modules/
+*/*/node_modules/
+.pnp
+.pnp.js
+
+vendor/
+*/vendor/
+go.sum
+
+##########################################################
+# BUILD & DIST - Generated files
+##########################################################
+# Next.js
+.next/
+*/.next/
+out/
+*/out/
+.vercel/
+
+# Go build
+bin/
+*/bin/
+dist/
+*/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Build artifacts
+*.test
+*.out
+coverage.out
+*.prof
+
+##########################################################
+# ENVIRONMENT VARIABLES - Keep secrets local
+##########################################################
+.env
+.env.local
+.env.*.local
+.env.backup
+.env.*.backup
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Except we KEEP example/template files
+!.env.example
+!.env.template
+
+##########################################################
+# IDE & EDITOR - Personal settings
+##########################################################
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+.DS_Store
+Thumbs.db
+
+##########################################################
+# LOGS & TEMPORARY FILES
+##########################################################
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.orig
+*.rej
+~*
+
+##########################################################
+# DATABASE - Local data files
+##########################################################
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+
+##########################################################
+# OS SPECIFIC
+##########################################################
+.DS_Store
+.AppleDouble
+.AppleDB
+._*
+ehthumbs.db
+Desktop.ini
+Thumbs.db
+
+##########################################################
+# TESTING & COVERAGE
+##########################################################
+.coverage/
+htmlcov/
+.pytest_cache/
+*.lcov
+coverage/
+
+##########################################################
+# LOCK FILES - Usually ignored in monorepos
+##########################################################
+# Uncomment if you want to commit lock files
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+# go.sum
+
+##########################################################
+# CACHE DIRECTORIES
+##########################################################
+.cache/
+.eslintcache
+.stylelintcache
+.turbo/
+dist-ssr
+
+##########################################################
+# GO SPECIFIC
+##########################################################
+go.work
+*.go.backup
+
+##########################################################
+# NODE/NPM SPECIFIC
+##########################################################
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+##########################################################
+# DOCKER OVERRIDES - Keep compose base, not local tweaks
+##########################################################
+docker-compose.override.yml
+
+##########################################################
+# ARCHIVES - No need to version
+##########################################################
+*.tar
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+##########################################################
+# ARCHITECTURE/DESIGN TOOLS
+##########################################################
+*.drawio
+*.dia
+*.vsdx
+
+##########################################################
+# WHITELISTED FILES - These ARE committed
+##########################################################
+!.gitignore
+!.gitkeep
+!README.md
+!LICENSE
+!*.md
+!package.json
+!package-lock.json
+!tsconfig.json
+!go.mod
+!Dockerfile
+!Makefile
+!next.config.js
+!postcss.config.js
+!tailwind.config.ts
+!.editorconfig
+!.prettierrc
+!.eslintrc*
