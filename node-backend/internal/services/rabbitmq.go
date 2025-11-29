@@ -175,8 +175,7 @@ func (s *RabbitMQService) processMessage(message *models.Message, payload map[st
 	switch message.MessageType {
 	case "data_request":
 		logrus.Info("Processing data request message")
-		// TODO: Handle data request
-		return nil
+		return s.handleDataRequest(message, payload)
 	case "notification":
 		logrus.Info("Processing notification message")
 		// TODO: Handle notification
@@ -185,6 +184,45 @@ func (s *RabbitMQService) processMessage(message *models.Message, payload map[st
 		logrus.Warnf("Unknown message type: %s", message.MessageType)
 		return nil
 	}
+}
+
+// handleDataRequest creates a DataRequest from the incoming message
+func (s *RabbitMQService) handleDataRequest(message *models.Message, payload map[string]interface{}) error {
+	// Extract fields from payload
+	requestorID := ""
+	if v, ok := payload["requestor_id"].(string); ok {
+		requestorID = v
+	}
+	if v, ok := payload["requestor_email"].(string); ok && requestorID == "" {
+		requestorID = v
+	}
+
+	requestType := "data_access"
+	if v, ok := payload["request_type"].(string); ok {
+		requestType = v
+	}
+
+	// Create DataRequest record
+	dataRequest := models.DataRequest{
+		MessageID:      message.ID,
+		RequestorID:    requestorID,
+		RequestType:    requestType,
+		Status:         "pending",
+		RequestPayload: message.Payload,
+	}
+
+	if err := database.DB.Create(&dataRequest).Error; err != nil {
+		logrus.WithError(err).Error("Failed to create DataRequest from message")
+		return fmt.Errorf("failed to create data request: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"data_request_id": dataRequest.ID,
+		"message_id":      message.ID,
+		"requestor_id":    requestorID,
+	}).Info("DataRequest created from incoming message")
+
+	return nil
 }
 
 // Stop stops the RabbitMQ listener

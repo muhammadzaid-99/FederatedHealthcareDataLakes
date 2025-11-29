@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -45,6 +46,9 @@ func (h *ETLHandler) SaveConfig(c *gin.Context) {
 		return
 	}
 
+	// Stop scheduler if it's running (config change requires restart)
+	_ = h.etlService.StopScheduler() // Ignore error if not running
+
 	// Save configuration
 	if err := h.etlService.SaveConfig(&req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save configuration", "details": err.Error()})
@@ -52,7 +56,7 @@ func (h *ETLHandler) SaveConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "ETL configuration saved successfully",
+		"message": "ETL configuration saved successfully. Scheduler has been stopped - please restart it if needed.",
 		"config":  req,
 	})
 }
@@ -71,8 +75,17 @@ func (h *ETLHandler) GetConfig(c *gin.Context) {
 		return
 	}
 
+	// Mask passwords for security - send indicators instead
+	hasDBPassword := config.DBPassword != ""
+	hasMinioSecret := config.MinioSecretKey != ""
+	config.DBPassword = ""
+	config.MinioSecretKey = ""
+
+	// Create response with masked config and password indicators
 	c.JSON(http.StatusOK, gin.H{
-		"config": config,
+		"config":           config,
+		"has_db_password":  hasDBPassword,
+		"has_minio_secret": hasMinioSecret,
 	})
 }
 
@@ -86,7 +99,9 @@ func (h *ETLHandler) TestConnection(c *gin.Context) {
 	}
 
 	// Test connection
+	log.Printf("[ETL] Testing database connection for %s@%s:%d/%s", req.DBUser, req.DBHost, req.DBPort, req.DBName)
 	if err := h.etlService.TestConnection(&req); err != nil {
+		log.Printf("[ETL] Connection test failed: %v", err)
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -94,6 +109,7 @@ func (h *ETLHandler) TestConnection(c *gin.Context) {
 		return
 	}
 
+	log.Println("[ETL] Connection test successful")
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Connection successful",

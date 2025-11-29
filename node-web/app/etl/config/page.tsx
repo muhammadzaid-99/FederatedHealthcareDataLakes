@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle, AlertCircle, Loader2, Play, Square } from "lucide-react";
+import { formatDateTimeString, formatTimeString } from '@/lib/utils';
 import { api } from "@/lib/api";
 
 interface ETLConfig {
@@ -31,8 +32,18 @@ interface ETLConfig {
   output_dir: string;
   departments: string[];
   enrichment_version: string;
-  nessie_namespace: string;
   is_active?: boolean;
+}
+
+interface SchedulerStatus {
+  is_running: boolean;
+  schedule_enabled?: boolean;
+  schedule_type?: string;
+  frequency_seconds?: number;
+  is_active?: boolean;
+  last_run?: string;
+  next_run?: string;
+  next_run_in_seconds?: number;
 }
 
 export default function ETLConfigPage() {
@@ -57,29 +68,46 @@ export default function ETLConfigPage() {
     output_dir: "/home/muhammad-zaid/Documents/hms_fyp/hms-dls2/node-backend/parquet",
     departments: ["cardiology", "neurology"],
     enrichment_version: "v1",
-    nessie_namespace: "",
   });
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [schedulerStatus, setSchedulerStatus] = useState<{ is_running: boolean } | null>(null);
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
+  const [hasDbPassword, setHasDbPassword] = useState(false);
+  const [hasMinioSecret, setHasMinioSecret] = useState(false);
 
   useEffect(() => {
     loadConfig();
     loadSchedulerStatus();
+    
+    // Refresh scheduler status every 5 seconds
+    const interval = setInterval(loadSchedulerStatus, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const loadConfig = async () => {
     setLoading(true);
     try {
       const response = await api.get("/etl/config");
-      if (response.data.config) {
-        setConfig(response.data.config);
+      console.log("Load config response:", response);
+      if (response.config) {
+        // Set config but clear passwords for display (they're never sent from backend)
+        const loadedConfig = {
+          ...response.config,
+          db_password: "", // Never display password
+          minio_secret_key: "", // Never display secret
+        };
+        setConfig(loadedConfig);
+        // Track if passwords are set
+        setHasDbPassword(response.has_db_password || false);
+        setHasMinioSecret(response.has_minio_secret || false);
       }
     } catch (error: any) {
-      if (error.response?.status !== 404) {
+      if (error.message?.includes('404') || error.message?.includes('not configured')) {
+        console.log("No ETL config found, using defaults");
+      } else {
         console.error("Failed to load ETL config:", error);
       }
     } finally {
@@ -90,7 +118,8 @@ export default function ETLConfigPage() {
   const loadSchedulerStatus = async () => {
     try {
       const response = await api.get("/etl/scheduler/status");
-      setSchedulerStatus(response.data);
+      console.log("Scheduler status response:", response);
+      setSchedulerStatus(response);
     } catch (error) {
       console.error("Failed to load scheduler status:", error);
     }
@@ -104,11 +133,15 @@ export default function ETLConfigPage() {
     setSaving(true);
     setTestResult(null);
     try {
-      await api.post("/etl/config", config);
+      console.log("Saving", config)
+      const response = await api.post("/etl/config", config);
+      console.log("Save response:", response);
       alert("ETL configuration saved successfully!");
-      loadConfig();
+      await loadConfig();
+      await loadSchedulerStatus();
     } catch (error: any) {
-      alert(`Failed to save configuration: ${error.response?.data?.error || error.message}`);
+      console.error("Save error:", error);
+      alert(`Failed to save configuration: ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -119,11 +152,17 @@ export default function ETLConfigPage() {
     setTestResult(null);
     try {
       const response = await api.post("/etl/test-connection", config);
-      setTestResult(response.data);
+      console.log("Test connection response:", response);
+      // Response is directly the success/message object
+      setTestResult({
+        success: response.success || false,
+        message: response.message || "Unknown response"
+      });
     } catch (error: any) {
+      console.error("Test connection error:", error);
       setTestResult({
         success: false,
-        message: error.response?.data?.error || error.message,
+        message: error.message || "Connection test failed",
       });
     } finally {
       setTesting(false);
@@ -176,12 +215,68 @@ export default function ETLConfigPage() {
         </div>
         <div className="flex gap-2">
           {schedulerStatus && (
-            <Badge variant={schedulerStatus.is_running ? "default" : "secondary"}>
-              {schedulerStatus.is_running ? "Scheduler Running" : "Scheduler Stopped"}
-            </Badge>
+            <>
+              <Badge variant={schedulerStatus.is_running ? "default" : "secondary"}>
+                {schedulerStatus.is_running ? "Scheduler Running" : "Scheduler Stopped"}
+              </Badge>
+              {schedulerStatus.is_running && schedulerStatus.next_run && (
+                <Badge variant="outline">
+                  Next run: {formatTimeString(schedulerStatus.next_run)}
+                </Badge>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {/* Scheduler Status Card */}
+      {schedulerStatus && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle>Scheduler Status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Status:</span>
+              <Badge variant={schedulerStatus.is_running ? "default" : "secondary"}>
+                {schedulerStatus.is_running ? "Running" : "Stopped"}
+              </Badge>
+            </div>
+            {schedulerStatus.schedule_enabled && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Schedule Type:</span>
+                  <span className="text-sm">{schedulerStatus.schedule_type || "N/A"}</span>
+                </div>
+                {schedulerStatus.frequency_seconds && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Frequency:</span>
+                    <span className="text-sm">Every {Math.floor(schedulerStatus.frequency_seconds / 60)} minutes</span>
+                  </div>
+                )}
+                {schedulerStatus.last_run && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Last Run:</span>
+                    <span className="text-sm">{formatDateTimeString(schedulerStatus.last_run)}</span>
+                  </div>
+                )}
+                {schedulerStatus.is_running && schedulerStatus.next_run && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Next Run:</span>
+                    <span className="text-sm">{formatDateTimeString(schedulerStatus.next_run)}</span>
+                  </div>
+                )}
+              {schedulerStatus.is_running && schedulerStatus.next_run_in_seconds !== undefined && schedulerStatus.next_run_in_seconds > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Next Run In:</span>
+                  <span className="text-sm">{Math.floor(schedulerStatus.next_run_in_seconds / 60)}m {schedulerStatus.next_run_in_seconds % 60}s</span>
+                </div>
+              )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Database Configuration */}
       <Card>
@@ -248,8 +343,11 @@ export default function ETLConfigPage() {
                 type="password"
                 value={config.db_password}
                 onChange={(e) => handleInputChange("db_password", e.target.value)}
-                placeholder="••••••••"
+                placeholder={hasDbPassword ? "Enter new password to change" : "Enter password"}
               />
+              {hasDbPassword && config.db_password === "" && (
+                <p className="text-xs text-green-600">✓ Password is set (hidden for security)</p>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -320,8 +418,11 @@ export default function ETLConfigPage() {
                 type="password"
                 value={config.minio_secret_key}
                 onChange={(e) => handleInputChange("minio_secret_key", e.target.value)}
-                placeholder="••••••••"
+                placeholder={hasMinioSecret ? "Enter new secret to change" : "Enter secret key"}
               />
+              {hasMinioSecret && config.minio_secret_key === "" && (
+                <p className="text-xs text-green-600">✓ Secret key is set (hidden for security)</p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -459,6 +560,13 @@ export default function ETLConfigPage() {
               </Button>
             )}
           </>
+        )}
+        {/* Always show stop button if scheduler is running */}
+        {!config.schedule_enabled && schedulerStatus?.is_running && (
+          <Button onClick={handleStopScheduler} variant="destructive">
+            <Square className="w-4 h-4 mr-2" />
+            Stop Scheduler
+          </Button>
         )}
       </div>
     </div>

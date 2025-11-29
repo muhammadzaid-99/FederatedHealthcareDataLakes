@@ -31,6 +31,7 @@ func Initialize(cfg *config.DatabaseConfig) error {
 		&models.Message{},
 		&models.ETLConfig{},
 		&models.ETLJob{},
+		&models.DataRequest{},
 	); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}

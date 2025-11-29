@@ -182,6 +182,94 @@ export const api = {
 
     return response.json();
   },
+
+  // Data Request Management
+  async listDataRequests(token: string, status?: string) {
+    const url = status 
+      ? `${API_BASE_URL}/api/v1/data-requests?status=${status}`
+      : `${API_BASE_URL}/api/v1/data-requests`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch data requests');
+    }
+
+    return response.json();
+  },
+
+  async getDataRequest(token: string, id: string) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/data-requests/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch data request');
+    }
+
+    return response.json();
+  },
+
+  async approveDataRequest(
+    token: string, 
+    id: string, 
+    data: {
+      approved_by: string;
+      date_range_start: string;
+      date_range_end: string;
+      duration_seconds?: number;
+      notes?: string;
+    }
+  ) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/data-requests/${id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to approve request');
+    }
+
+    return response.json();
+  },
+
+  async rejectDataRequest(
+    token: string, 
+    id: string, 
+    data: {
+      rejected_by: string;
+      notes?: string;
+    }
+  ) {
+    const response = await fetch(`${API_BASE_URL}/api/v1/data-requests/${id}/reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to reject request');
+    }
+
+    return response.json();
+  },
 };
 
 // Local storage helpers for node-web

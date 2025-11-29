@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Activity, Database, FileText, LogOut, MessageSquare, RefreshCw, Server, Settings, Workflow } from 'lucide-react';
+import { formatDateTimeString, formatTimeString } from '@/lib/utils';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [hospitalInfo, setHospitalInfo] = useState<any>(null);
   const [error, setError] = useState('');
+  const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
 
   const loadNodeStatus = async () => {
     const token = storage.getToken();
@@ -45,8 +47,23 @@ export default function DashboardPage() {
     }
   };
 
+  const loadSchedulerStatus = async () => {
+    try {
+      const response = await api.get("/etl/scheduler/status");
+      setSchedulerStatus(response);
+    } catch (error) {
+      // Scheduler status is optional, don't show error
+      console.log("Scheduler status not available");
+    }
+  };
+
   useEffect(() => {
     loadNodeStatus();
+    loadSchedulerStatus();
+
+    // Refresh scheduler status every 10 seconds
+    const interval = setInterval(loadSchedulerStatus, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogout = () => {
@@ -193,13 +210,55 @@ export default function DashboardPage() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Server className="h-5 w-5 mr-2 text-indigo-600" />
-                Status
+                Node Status
               </CardTitle>
               <CardDescription>
                 {hospitalInfo?.handshake_done ? (
                   <Badge variant="default">Active</Badge>
                 ) : (
                   <Badge variant="secondary">Not Configured</Badge>
+                )}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Activity className="h-5 w-5 mr-2 text-green-600" />
+                ETL Scheduler
+              </CardTitle>
+              <CardDescription>
+                {schedulerStatus ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Status:</span>
+                      <Badge variant={schedulerStatus.is_running ? "default" : "secondary"}>
+                        {schedulerStatus.is_running ? "Running" : "Stopped"}
+                      </Badge>
+                    </div>
+                    {schedulerStatus.is_running && schedulerStatus.next_run && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">Next Run:</span>
+                        <span className="text-xs">{formatTimeString(schedulerStatus.next_run)}</span>
+                      </div>
+                    )}
+                    {schedulerStatus.is_running && schedulerStatus.next_run_in_seconds > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">In:</span>
+                        <span className="text-xs font-mono">
+                          {Math.floor(schedulerStatus.next_run_in_seconds / 60)}m {schedulerStatus.next_run_in_seconds % 60}s
+                        </span>
+                      </div>
+                    )}
+                    {!schedulerStatus.is_running && (
+                      <div className="text-xs text-muted-foreground">
+                        Start from ETL Config page
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Badge variant="outline">Not Configured</Badge>
                 )}
               </CardDescription>
             </CardHeader>
@@ -244,7 +303,7 @@ export default function DashboardPage() {
                       <div className="flex justify-between py-2 border-b">
                         <span className="text-sm text-gray-600">Configured At:</span>
                         <span className="text-sm">
-                          {hospitalInfo?.configured_at ? new Date(hospitalInfo.configured_at).toLocaleString("en-PK") : 'N/A'}
+                          {hospitalInfo?.configured_at ? formatDateTimeString(hospitalInfo.configured_at) : 'N/A'}
                         </span>
                       </div>
                     </div>

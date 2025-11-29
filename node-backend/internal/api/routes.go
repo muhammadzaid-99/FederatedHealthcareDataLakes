@@ -9,12 +9,13 @@ import (
 )
 
 type Router struct {
-	cfg          *config.Config
-	authHandler  *handlers.AuthHandler
-	nodeHandler  *handlers.NodeHandler
-	etlHandler   *handlers.ETLHandler
-	authService  *services.AuthService
-	tokenService *services.TokenService
+	cfg                *config.Config
+	authHandler        *handlers.AuthHandler
+	nodeHandler        *handlers.NodeHandler
+	etlHandler         *handlers.ETLHandler
+	dataRequestHandler *handlers.DataRequestHandler
+	authService        *services.AuthService
+	tokenService       *services.TokenService
 }
 
 func NewRouter(
@@ -22,16 +23,18 @@ func NewRouter(
 	authHandler *handlers.AuthHandler,
 	nodeHandler *handlers.NodeHandler,
 	etlHandler *handlers.ETLHandler,
+	dataRequestHandler *handlers.DataRequestHandler,
 	authService *services.AuthService,
 	tokenService *services.TokenService,
 ) *Router {
 	return &Router{
-		cfg:          cfg,
-		authHandler:  authHandler,
-		nodeHandler:  nodeHandler,
-		etlHandler:   etlHandler,
-		authService:  authService,
-		tokenService: tokenService,
+		cfg:                cfg,
+		authHandler:        authHandler,
+		nodeHandler:        nodeHandler,
+		etlHandler:         etlHandler,
+		dataRequestHandler: dataRequestHandler,
+		authService:        authService,
+		tokenService:       tokenService,
 	}
 }
 
@@ -95,6 +98,15 @@ func (r *Router) Setup() *gin.Engine {
 				etl.POST("/jobs/run", r.etlHandler.RunJob)
 				etl.GET("/jobs", r.etlHandler.GetJobs)
 				etl.GET("/jobs/:id", r.etlHandler.GetJob)
+			}
+
+			// Data Request Management
+			dataRequests := protected.Group("/data-requests")
+			{
+				dataRequests.GET("", r.dataRequestHandler.ListRequests)
+				dataRequests.GET("/:id", r.dataRequestHandler.GetRequest)
+				dataRequests.POST("/:id/approve", r.dataRequestHandler.ApproveRequest)
+				dataRequests.POST("/:id/reject", r.dataRequestHandler.RejectRequest)
 			}
 
 			// TODO: Add proxy endpoints to central-backend here

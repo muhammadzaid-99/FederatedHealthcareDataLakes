@@ -105,8 +105,22 @@ type NodeAccessResponse struct {
 	ValidUntil   *time.Time `json:"valid_until,omitempty"`
 	RespondedAt  *time.Time `json:"responded_at,omitempty"`
 	Notes        string     `gorm:"type:text" json:"notes,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+
+	// STS Credentials for data access
+	AccessKeyID     string     `gorm:"type:varchar(255)" json:"access_key_id,omitempty"`
+	SecretAccessKey string     `gorm:"type:text" json:"secret_access_key,omitempty"`
+	SessionToken    string     `gorm:"type:text" json:"session_token,omitempty"`
+	CredExpiration  *time.Time `json:"cred_expiration,omitempty"`
+
+	// Date range approved for access
+	DateRangeStart string `gorm:"type:varchar(50)" json:"date_range_start,omitempty"`
+	DateRangeEnd   string `gorm:"type:varchar(50)" json:"date_range_end,omitempty"`
+
+	// IAM Policy used
+	PolicyJSON string `gorm:"type:text" json:"policy_json,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Relationships
 	Request  DataAccessRequest `gorm:"foreignKey:RequestID" json:"-"`

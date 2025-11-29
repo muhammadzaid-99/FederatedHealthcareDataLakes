@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, RefreshCw, Eye, CheckCircle, XCircle, Clock, PlayCircle } from "lucide-react";
-import {api} from "@/lib/api";
+import { api } from "@/lib/api";
 
 interface ETLJob {
   id: string;
@@ -33,23 +33,27 @@ export default function ETLJobsPage() {
   const [loading, setLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ETLJob | null>(null);
   const [total, setTotal] = useState(0);
-  const [limit] = useState(20);
+  const [limit] = useState(5);
   const [offset, setOffset] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadJobs();
-    const interval = setInterval(loadJobs, 5000); // Refresh every 5 seconds
+    const interval = setInterval(loadJobs, 1000); // Refresh every 5 seconds
     return () => clearInterval(interval);
   }, [offset]);
 
   const loadJobs = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await api.get(`/etl/jobs?limit=${limit}&offset=${offset}`);
-      setJobs(response.data.jobs || []);
-      setTotal(response.data.total || 0);
-    } catch (error) {
+      console.log("Jobs response:", response);
+      setJobs(response.jobs || []);
+      setTotal(response.total || 0);
+    } catch (error: any) {
       console.error("Failed to load jobs:", error);
+      setError(error.message || "Failed to load jobs");
     } finally {
       setLoading(false);
     }
@@ -58,7 +62,8 @@ export default function ETLJobsPage() {
   const loadJobDetails = async (jobId: string) => {
     try {
       const response = await api.get(`/etl/jobs/${jobId}`);
-      setSelectedJob(response.data.job);
+      console.log(response)
+      setSelectedJob(response.job);
     } catch (error) {
       console.error("Failed to load job details:", error);
     }
@@ -114,7 +119,12 @@ export default function ETLJobsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {loading && jobs.length === 0 ? (
+          {error ? (
+            <div className="text-center py-8">
+              <p className="text-red-600 mb-4">{error}</p>
+              <Button onClick={loadJobs} variant="outline">Try Again</Button>
+            </div>
+          ) : loading && jobs.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
             </div>
@@ -213,9 +223,15 @@ export default function ETLJobsPage() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Job Details</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedJob(null)}>
-                Close
-              </Button>
+              <div className="flex gap-2 items-center">
+                <Button variant="outline" size="sm" onClick={() => loadJobDetails(selectedJob.id)}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedJob(null)}>
+                  Close
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -262,7 +278,7 @@ export default function ETLJobsPage() {
             {selectedJob.message && (
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Message</p>
-                <p className="text-sm mt-1 p-2 bg-muted rounded">{selectedJob.message}</p>
+                <p className="text-sm mt-1 p-2 bg-muted rounded overflow-auto max-h-96 whitespace-pre-wrap">{selectedJob.message}</p>
               </div>
             )}
 
@@ -290,14 +306,16 @@ export default function ETLJobsPage() {
               </div>
             </div>
 
-            {selectedJob.logs && (
+            {selectedJob.logs && selectedJob.logs.trim() !== "" && (
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Logs</p>
-                <pre className="text-xs bg-black text-green-400 p-4 rounded overflow-x-auto max-h-64">
+                <p className="text-sm font-medium text-muted-foreground mb-2">Execution Logs</p>
+                <div className="bg-gray-900 text-green-400 p-4 rounded font-mono text-xs overflow-auto max-h-96 whitespace-pre-wrap">
                   {selectedJob.logs}
-                </pre>
+                </div>
               </div>
             )}
+
+
           </CardContent>
         </Card>
       )}
