@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,13 +43,28 @@ func (s *ETLService) SaveConfig(config *models.ETLConfig) error {
 		if err := s.db.Create(config).Error; err != nil {
 			return fmt.Errorf("failed to create ETL config: %w", err)
 		}
+		log.Printf("[ETL] Created new config with ID: %s", config.ID)
 	} else {
 		// Update existing config
+		// Preserve passwords if empty string provided (user didn't change them)
+		if config.DBPassword == "" {
+			config.DBPassword = existing.DBPassword
+		}
+		if config.MinioSecretKey == "" {
+			config.MinioSecretKey = existing.MinioSecretKey
+		}
+
 		config.ID = existing.ID
 		config.CreatedAt = existing.CreatedAt
+
+		// Log what we're saving
+		log.Printf("[ETL] Updating config %s, DBPassword set: %v, MinioSecretKey set: %v",
+			config.ID, config.DBPassword != "", config.MinioSecretKey != "")
+
 		if err := s.db.Save(config).Error; err != nil {
 			return fmt.Errorf("failed to update ETL config: %w", err)
 		}
+		log.Printf("[ETL] Updated config with ID: %s", config.ID)
 	}
 
 	return nil
@@ -244,6 +260,7 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 	// Get config
 	var config models.ETLConfig
 	if err := s.db.First(&config, "id = ?", configID).Error; err != nil {
+		log.Printf("[ETL] Failed to get config: %v", err)
 		return fmt.Errorf("failed to get config: %w", err)
 	}
 
@@ -257,6 +274,11 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 	}
 	end = time.Now()
 
+	log.Printf("[ETL] Starting job for config %s, date range: %s to %s", configID, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	log.Printf("[ETL] Config: DBHost=%s, DBPort=%d, DBName=%s, DBUser=%s, DBTable=%s, MinioEndpoint=%s, MinioBucket=%s, PythonExecutable=%s, JDBCDriver=%s",
+		config.DBHost, config.DBPort, config.DBName, config.DBUser, config.DBTable,
+		config.MinioEndpoint, config.MinioBucket, config.PythonPath, config.JDBCPath)
+
 	// Create job record
 	job := &models.ETLJob{
 		ConfigID:       config.ID,
@@ -265,19 +287,46 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 		DateRangeEnd:   end.Format(time.RFC3339),
 		Status:         "running",
 		Stage:          "extraction",
+		Logs:           "",
 	}
 
 	if err := s.db.Create(job).Error; err != nil {
+		log.Printf("[ETL] Failed to create job record: %v", err)
 		return fmt.Errorf("failed to create job: %w", err)
 	}
 
+	s.appendJobLog(job, fmt.Sprintf("Job started for date range %s to %s", start.Format("2006-01-02"), end.Format("2006-01-02")))
+
 	// Run extraction
 	log.Printf("[ETL] Starting extraction from %s to %s", job.DateRangeStart, job.DateRangeEnd)
-	stagingPath, err := s.runExtraction(&config, job.DateRangeStart, job.DateRangeEnd)
+	s.appendJobLog(job, "Stage: EXTRACTION - Starting data extraction from database")
+	stagingPath, noData, err := s.runExtraction(&config, job.DateRangeStart, job.DateRangeEnd)
 	if err != nil {
+		log.Printf("[ETL] Extraction failed: %v", err)
 		s.updateJobError(job, "extraction", err)
 		return err
 	}
+
+	// Check if no data was found - this is a successful completion, not an error
+	if noData {
+		log.Printf("[ETL] No records found in date range, completing job successfully")
+		s.appendJobLog(job, "No records found in the specified date range. Job completed successfully.")
+		now := time.Now()
+		job.Status = "completed"
+		job.Stage = "completed"
+		job.EndTime = &now
+		s.db.Save(job)
+
+		// Update last run time
+		config.LastRunAt = &now
+		config.LastRunEnd = &now
+		s.db.Save(&config)
+
+		return nil
+	}
+
+	log.Printf("[ETL] Extraction completed, staging path: %s", stagingPath)
+	s.appendJobLog(job, fmt.Sprintf("Extraction completed successfully. Staging path: %s", stagingPath))
 
 	job.StagingPath = stagingPath
 	job.Stage = "normalization"
@@ -285,11 +334,16 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 
 	// Run normalization
 	log.Printf("[ETL] Starting normalization")
+	s.appendJobLog(job, "Stage: NORMALIZATION - Transforming data to FHIR format")
+
 	normalizedPath, err := s.runNormalization(&config, stagingPath)
 	if err != nil {
+		log.Printf("[ETL] Normalization failed: %v", err)
 		s.updateJobError(job, "normalization", err)
 		return err
 	}
+	log.Printf("[ETL] Normalization completed, normalized path: %s", normalizedPath)
+	s.appendJobLog(job, fmt.Sprintf("Normalization completed successfully. Normalized path: %s", normalizedPath))
 
 	job.NormalizedPath = normalizedPath
 	job.Stage = "validation"
@@ -297,11 +351,17 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 
 	// Run validation and publish
 	log.Printf("[ETL] Starting validation and publish")
+	s.appendJobLog(job, "Stage: VALIDATION - Validating data and publishing to MinIO")
+
 	validatedPath, recordsValidated, recordsFailed, err := s.runValidationAndPublish(&config, job.DateRangeStart, job.DateRangeEnd, normalizedPath)
 	if err != nil {
+		log.Printf("[ETL] Validation failed: %v", err)
 		s.updateJobError(job, "validation", err)
 		return err
 	}
+	log.Printf("[ETL] Validation completed, validated: %d, failed: %d", recordsValidated, recordsFailed)
+	s.appendJobLog(job, fmt.Sprintf("Validation completed. Records validated: %d, Records failed: %d", recordsValidated, recordsFailed))
+	s.appendJobLog(job, fmt.Sprintf("Validated path: %s", validatedPath))
 
 	job.ValidatedPath = validatedPath
 	job.RecordsValidated = recordsValidated
@@ -311,6 +371,7 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 	endTime := time.Now()
 	job.EndTime = &endTime
 	job.Message = "Job completed successfully"
+	s.appendJobLog(job, fmt.Sprintf("Job completed successfully in %v", endTime.Sub(job.StartTime)))
 	s.db.Save(job)
 
 	// Update config last run
@@ -322,7 +383,8 @@ func (s *ETLService) RunJob(configID uuid.UUID) error {
 }
 
 // runExtraction executes the extraction script
-func (s *ETLService) runExtraction(config *models.ETLConfig, start, end string) (string, error) {
+// Returns: stagingPath, noData flag, error
+func (s *ETLService) runExtraction(config *models.ETLConfig, start, end string) (string, bool, error) {
 	scriptPath := filepath.Join(config.ScriptsPath, "extract2.py")
 
 	cmd := exec.Command(config.PythonPath, scriptPath, start, end)
@@ -345,21 +407,43 @@ func (s *ETLService) runExtraction(config *models.ETLConfig, start, end string) 
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("extraction failed: %s - %s", err.Error(), stderr.String())
+		log.Printf("[ETL] Extraction script error: %s", err.Error())
+		log.Printf("[ETL] Extraction stdout: %s", stdout.String())
+		log.Printf("[ETL] Extraction stderr: %s", stderr.String())
+		return "", false, fmt.Errorf("extraction failed: %s - stderr: %s - stdout: %s", err.Error(), stderr.String(), stdout.String())
 	}
+
+	// Log the raw output for debugging
+	stdoutStr := stdout.String()
+	log.Printf("[ETL] Extraction raw stdout: %s", stdoutStr)
+	log.Printf("[ETL] Extraction raw stderr: %s", stderr.String())
 
 	// Parse output
 	var result map[string]interface{}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		return "", fmt.Errorf("failed to parse extraction output: %w - output: %s", err, stdout.String())
+		return "", false, fmt.Errorf("failed to parse extraction output: %w - output: %s", err, stdoutStr)
+	}
+
+	// Check if success field exists and is false
+	if success, ok := result["success"].(bool); ok && !success {
+		message := result["message"].(string)
+		return "", false, fmt.Errorf("extraction script reported failure: %s", message)
+	}
+
+	// Check status field
+	if status, ok := result["status"].(string); ok && status == "OK" {
+		// Check if staging_path is null (no data found)
+		if result["staging_path"] == nil {
+			return "", true, nil // noData = true
+		}
 	}
 
 	stagingPath, ok := result["staging_path"].(string)
-	if !ok {
-		return "", fmt.Errorf("staging_path not found in output")
+	if !ok || stagingPath == "" {
+		return "", true, nil // noData = true
 	}
 
-	return stagingPath, nil
+	return stagingPath, false, nil
 }
 
 // runNormalization executes the normalization script
@@ -400,7 +484,17 @@ func (s *ETLService) runValidationAndPublish(config *models.ETLConfig, start, en
 	// Generate validated path
 	validatedPath := filepath.Join(filepath.Dir(filepath.Dir(normalizedPath)), "validated", filepath.Base(normalizedPath))
 
+	// Get NessieNamespace from NodeConfig (single source of truth)
+	var nodeConfig models.NodeConfig
+	if err := s.db.First(&nodeConfig).Error; err != nil {
+		return "", 0, 0, fmt.Errorf("failed to get node config for Nessie namespace: %w", err)
+	}
+
 	cmd := exec.Command(config.PythonPath, scriptPath, start, end, normalizedPath, validatedPath)
+
+	// Debug: Log the config values
+	log.Printf("[ETL] Config - NessieNamespace: '%s', MinioBucket: '%s', MinioEndpoint: '%s'",
+		nodeConfig.NessieNamespace, config.MinioBucket, config.MinioEndpoint)
 
 	// Set environment variables
 	cmd.Env = os.Environ()
@@ -410,6 +504,7 @@ func (s *ETLService) runValidationAndPublish(config *models.ETLConfig, start, en
 	cmd.Env = append(cmd.Env, fmt.Sprintf("MINIO_ACCESS_KEY=%s", config.MinioAccessKey))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("MINIO_SECRET_KEY=%s", config.MinioSecretKey))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BUCKET_NAME=%s", config.MinioBucket))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("NESSIE_NAMESPACE=%s", nodeConfig.NessieNamespace))
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -419,9 +514,30 @@ func (s *ETLService) runValidationAndPublish(config *models.ETLConfig, start, en
 		return "", 0, 0, fmt.Errorf("validation failed: %s - %s", err.Error(), stderr.String())
 	}
 
+	// Debug: Log what we received
+	stdoutStr := stdout.String()
+	maxLen := 500
+	if len(stdoutStr) < maxLen {
+		maxLen = len(stdoutStr)
+	}
+	log.Printf("[ETL] Validation script stdout: %s", stdoutStr)
+	log.Printf("[ETL] Validation script stderr: %s", stderr.String())
+
+	// Strip Ivy messages from stdout (they appear before JSON)
+	// Find the first '{' character which starts the JSON
+	jsonStart := strings.Index(stdoutStr, "{")
+	if jsonStart == -1 {
+		log.Printf("[ETL] No JSON found in stdout. Raw output: %s", stdoutStr[:maxLen])
+		return "", 0, 0, fmt.Errorf("no JSON output found from validation script")
+	}
+
+	// Extract just the JSON part
+	jsonStr := stdoutStr[jsonStart:]
+
 	// Parse output
 	var result map[string]interface{}
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		log.Printf("[ETL] Failed to parse JSON. Raw JSON (first %d chars): %s", maxLen, jsonStr[:min(maxLen, len(jsonStr))])
 		return "", 0, 0, fmt.Errorf("failed to parse validation output: %w", err)
 	}
 
@@ -443,14 +559,26 @@ func (s *ETLService) runValidationAndPublish(config *models.ETLConfig, start, en
 	return validatedPath, recordsValidated, recordsFailed, nil
 }
 
+// appendJobLog adds a timestamped log entry to the job
+func (s *ETLService) appendJobLog(job *models.ETLJob, message string) {
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	logEntry := fmt.Sprintf("[%s] %s\n", timestamp, message)
+	job.Logs += logEntry
+	s.db.Save(job)
+}
+
 // updateJobError updates job with error status
 func (s *ETLService) updateJobError(job *models.ETLJob, stage string, err error) {
+	log.Printf("[ETL] Job %s failed at stage %s: %v", job.ID, stage, err)
+	s.appendJobLog(job, fmt.Sprintf("ERROR at stage %s: %v", stage, err))
 	job.Status = "failed"
 	job.Stage = stage
 	job.Message = err.Error()
 	endTime := time.Now()
 	job.EndTime = &endTime
-	s.db.Save(job)
+	if err := s.db.Save(job).Error; err != nil {
+		log.Printf("[ETL] Failed to save job error: %v", err)
+	}
 }
 
 // GetJobs retrieves ETL job history
@@ -488,7 +616,27 @@ func (s *ETLService) GetSchedulerStatus() map[string]interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"is_running": s.isRunning,
 	}
+
+	// Get config to show schedule details
+	var config models.ETLConfig
+	if err := s.db.First(&config).Error; err == nil {
+		result["schedule_enabled"] = config.ScheduleEnabled
+		result["schedule_type"] = config.ScheduleType
+		result["frequency_seconds"] = config.FrequencySeconds
+		result["is_active"] = config.IsActive
+
+		if config.LastRunEnd != nil {
+			result["last_run"] = config.LastRunEnd.Format(time.RFC3339)
+			if s.isRunning && config.FrequencySeconds > 0 {
+				nextRun := config.LastRunEnd.Add(time.Duration(config.FrequencySeconds) * time.Second)
+				result["next_run"] = nextRun.Format(time.RFC3339)
+				result["next_run_in_seconds"] = int(time.Until(nextRun).Seconds())
+			}
+		}
+	}
+
+	return result
 }

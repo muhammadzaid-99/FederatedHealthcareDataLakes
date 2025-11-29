@@ -85,13 +85,13 @@ type ETLConfig struct {
 	DBPort     int    `gorm:"not null" json:"db_port"`
 	DBName     string `gorm:"not null" json:"db_name"`
 	DBUser     string `gorm:"not null" json:"db_user"`
-	DBPassword string `gorm:"not null" json:"-"` // Never expose in JSON
+	DBPassword string `gorm:"not null" json:"db_password,omitempty"`
 	DBTable    string `gorm:"not null" json:"db_table"`
 
 	// MinIO Configuration
 	MinioEndpoint  string `gorm:"not null" json:"minio_endpoint"`
 	MinioAccessKey string `gorm:"not null" json:"minio_access_key"`
-	MinioSecretKey string `gorm:"not null" json:"-"` // Never expose in JSON
+	MinioSecretKey string `gorm:"not null" json:"minio_secret_key,omitempty"`
 	MinioBucket    string `gorm:"not null" json:"minio_bucket"`
 
 	// Python Environment
@@ -109,7 +109,6 @@ type ETLConfig struct {
 	OutputDir         string   `json:"output_dir"`                         // Local output directory for parquet files
 	Departments       []string `gorm:"serializer:json" json:"departments"` // e.g., ["cardiology", "neurology"]
 	EnrichmentVersion string   `json:"enrichment_version"`                 // Version tag for enrichment logic
-	NessieNamespace   string   `json:"nessie_namespace"`                   // From node config
 
 	// Tracking
 	LastRunAt  *time.Time `json:"last_run_at,omitempty"`
@@ -154,8 +153,8 @@ type ETLJob struct {
 	NormalizedPath   string `json:"normalized_path"`
 	ValidatedPath    string `json:"validated_path"`
 
-	// Logs
-	Logs string `gorm:"type:text" json:"logs"` // Execution logs
+	// Logs - stores timestamped execution logs
+	Logs string `gorm:"type:text" json:"logs"` // JSON array of log entries with timestamps
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -165,6 +164,46 @@ type ETLJob struct {
 func (e *ETLJob) BeforeCreate(tx *gorm.DB) error {
 	if e.ID == uuid.Nil {
 		e.ID = uuid.New()
+	}
+	return nil
+}
+
+// DataRequest represents a data access request that needs approval
+type DataRequest struct {
+	ID uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+
+	// Request Origin
+	MessageID   uuid.UUID `gorm:"type:uuid" json:"message_id"` // Link to Message table
+	RequestorID string    `json:"requestor_id"`                // ID of entity requesting data
+	RequestType string    `json:"request_type"`                // e.g., "iceberg_table_access"
+
+	// Status Management
+	Status     string     `gorm:"default:'pending'" json:"status"` // pending, approved, rejected
+	ApprovedAt *time.Time `json:"approved_at,omitempty"`
+	RejectedAt *time.Time `json:"rejected_at,omitempty"`
+	ApprovedBy string     `json:"approved_by,omitempty"` // Username who approved/rejected
+	RejectedBy string     `json:"rejected_by,omitempty"`
+
+	// Date Range for Data Access
+	DateRangeStart string `json:"date_range_start,omitempty"` // YYYY-MM-DD format
+	DateRangeEnd   string `json:"date_range_end,omitempty"`   // YYYY-MM-DD format or pattern like "2025-11-*"
+
+	// Generated Policy and Credentials (stored as JSON)
+	PolicyJSON      string `gorm:"type:text" json:"policy_json,omitempty"`      // Full IAM policy as JSON string
+	CredentialsJSON string `gorm:"type:text" json:"credentials_json,omitempty"` // Temporary credentials as JSON
+
+	// Additional Metadata
+	RequestPayload string `gorm:"type:text" json:"request_payload,omitempty"` // Original request data as JSON
+	Notes          string `gorm:"type:text" json:"notes,omitempty"`           // Approval/rejection notes
+
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+func (d *DataRequest) BeforeCreate(tx *gorm.DB) error {
+	if d.ID == uuid.Nil {
+		d.ID = uuid.New()
 	}
 	return nil
 }

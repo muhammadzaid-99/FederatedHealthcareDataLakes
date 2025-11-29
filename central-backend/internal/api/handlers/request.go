@@ -139,6 +139,19 @@ func (h *RequestHandler) SubmitResponse(c *gin.Context) {
 		PresignedURL string `json:"presigned_url"`
 		Notes        string `json:"notes"`
 		ValidHours   int    `json:"valid_hours"` // hours the presigned URL is valid
+
+		// STS Credentials
+		AccessKeyID     string `json:"access_key_id"`
+		SecretAccessKey string `json:"secret_access_key"`
+		SessionToken    string `json:"session_token"`
+		CredExpiration  string `json:"cred_expiration"` // ISO8601 timestamp
+
+		// Date range for approved access
+		DateRangeStart string `json:"date_range_start"`
+		DateRangeEnd   string `json:"date_range_end"`
+
+		// IAM Policy
+		PolicyJSON string `json:"policy_json"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -161,7 +174,15 @@ func (h *RequestHandler) SubmitResponse(c *gin.Context) {
 		validUntil = &t
 	}
 
-	// Submit response
+	// Parse credential expiration
+	var credExpiration *time.Time
+	if req.CredExpiration != "" {
+		if t, err := time.Parse(time.RFC3339, req.CredExpiration); err == nil {
+			credExpiration = &t
+		}
+	}
+
+	// Submit response with credentials
 	response, err := h.requestService.SubmitNodeResponse(
 		requestID,
 		hospitalID,
@@ -169,6 +190,15 @@ func (h *RequestHandler) SubmitResponse(c *gin.Context) {
 		req.PresignedURL,
 		req.Notes,
 		validUntil,
+		services.NodeResponseCredentials{
+			AccessKeyID:     req.AccessKeyID,
+			SecretAccessKey: req.SecretAccessKey,
+			SessionToken:    req.SessionToken,
+			CredExpiration:  credExpiration,
+			DateRangeStart:  req.DateRangeStart,
+			DateRangeEnd:    req.DateRangeEnd,
+			PolicyJSON:      req.PolicyJSON,
+		},
 	)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

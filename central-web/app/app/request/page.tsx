@@ -133,7 +133,7 @@ export default function PublicRequestPage() {
 
     try {
       const response = await api.getRequestStatus(checkId)
-      setRequestStatus(response)
+      setRequestStatus(response.request)
     } catch (err: any) {
       setError(err.message || 'Request not found')
     } finally {

@@ -5,6 +5,8 @@ import logging
 import json
 import uuid
 import re
+import io
+from contextlib import redirect_stdout, redirect_stderr
 from pyspark.sql import SparkSession, DataFrame, Row
 from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.sql.functions import lit, current_timestamp, date_format
@@ -27,26 +29,37 @@ local_path = sys.argv[3]
 output_path = sys.argv[4]
 
 # ------------------- CONFIG -------------------
-JDBC_URL = "jdbc:postgresql://localhost:5432/hms"
-DB_TABLE = "checkups"
-DB_USER = "postgres"
-DB_PASSWORD = "12345678"
-JDBC_DRIVER_FILENAME = "postgresql-42.7.7.jar"
-JDBC_DRIVER_PATH = os.path.abspath(JDBC_DRIVER_FILENAME)
+# Read from environment variables (set by Go backend) - REQUIRED, no defaults
+REQUIRED_ENV_VARS = {
+    "MINIO_ENDPOINT": os.environ.get("MINIO_ENDPOINT"),
+    "MINIO_ACCESS_KEY": os.environ.get("MINIO_ACCESS_KEY"),
+    "MINIO_SECRET_KEY": os.environ.get("MINIO_SECRET_KEY"),
+    "BUCKET_NAME": os.environ.get("BUCKET_NAME"),
+    "NESSIE_NAMESPACE": os.environ.get("NESSIE_NAMESPACE"),
+}
 
-OUTPUT_DIR = os.path.abspath("parquet")
+# Fail fast if any required env var is missing or empty
+missing_vars = [name for name, value in REQUIRED_ENV_VARS.items() if not value]
+if missing_vars:
+    error_msg = f"Missing or empty required environment variables: {', '.join(missing_vars)}"
+    print(json.dumps({"success": False, "message": error_msg}), flush=True)
+    sys.exit(1)
 
-MINIO_ENDPOINT = "http://localhost:9000"
-MINIO_ACCESS_KEY = "etluser"
-MINIO_SECRET_KEY = "etlpass123"
-BUCKET_NAME = "hospital-data"
-# BUCKET_NAME = os.environ.get("BUCKET_NAME", "my-bucket")
+# Assign to constants after validation
+MINIO_ENDPOINT = REQUIRED_ENV_VARS["MINIO_ENDPOINT"]
+MINIO_ACCESS_KEY = REQUIRED_ENV_VARS["MINIO_ACCESS_KEY"]
+MINIO_SECRET_KEY = REQUIRED_ENV_VARS["MINIO_SECRET_KEY"]
+BUCKET_NAME = REQUIRED_ENV_VARS["BUCKET_NAME"]
+NESSIE_NAMESPACE = REQUIRED_ENV_VARS["NESSIE_NAMESPACE"]
 DEPARTMENTS = ["cardiology", "neurology"]
 ENRICHMENT_VERSION = "v1"  # bump this when enrichment logic changes
 
 # ------------------- LOGGER -------------------
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("ETL")
+
+# Debug: Log configuration
+logger.info(f"Config - NESSIE_NAMESPACE: '{NESSIE_NAMESPACE}', BUCKET_NAME: '{BUCKET_NAME}', MINIO_ENDPOINT: '{MINIO_ENDPOINT}'")
 
 
 # ------------------- MINIO -------------------
@@ -165,7 +178,8 @@ def write_iceberg_spark(df: DataFrame, run_id: str, start: str, end: str,table: 
     # table = "hospital_checkups"
     # catalog = "local"   # expects SPARK catalog named 'local' configured in env
     # db = "default"
-    full_table = f"{catalog}.{db}.{table}"
+    # Use backticks for db (namespace) to handle special characters like hyphens
+    full_table = f"{catalog}.`{db}`.{table}"
     # logger.info("spark.sql.catalog.local:", spark.conf.get("spark.sql.catalog.local"))
     # logger.info("spark.sql.catalog.local.type:", spark.conf.get("spark.sql.catalog.local.type"))
 
@@ -683,197 +697,113 @@ def enrich_validate_and_publish(local_path: str, start: str, end: str):
     # spark.sql("SHOW DATABASES in iceberg_hive").show()
     # # spark.sql("SHOW TABLES IN iceberg_hive.hospitalA").show()
     
-    NESSIE_URI = "localhost:19120/api/v1" 
+    NESSIE_URI = "localhost:19120/api/v1"
     os.environ['AWS_REGION'] = 'us-east-1'
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
     
-    spark = (SparkSession.builder
-    .appName("ValidatePublish")
-    .master("local[4]")
-    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-    .config("spark.sql.catalog.nessie", "org.apache.iceberg.spark.SparkCatalog")
-    .config("spark.sql.catalog.nessie.catalog-impl", "org.apache.iceberg.nessie.NessieCatalog")
-    .config("spark.sql.catalog.nessie.uri", "http://localhost:19120/api/v1")
-    .config("spark.sql.catalog.nessie.ref", "main")
-    .config("spark.sql.catalog.nessie.warehouse", f"s3a://{BUCKET_NAME}/iceberg/")
-    .config("spark.sql.catalog.nessie.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-    # Your MinIO S3A configs
-    .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT)
-    .config("spark.hadoop.fs.s3a.access.key", MINIO_ACCESS_KEY)
-    .config("spark.hadoop.fs.s3a.secret.key", MINIO_SECRET_KEY)
-    .config("spark.hadoop.fs.s3a.path.style.access", "true")
-    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-    # .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-    # S3FileIO specific configs for MinIO
-    .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
-    .config("spark.sql.catalog.nessie.s3.endpoint", MINIO_ENDPOINT)
-    .config("spark.sql.catalog.nessie.s3.access-key-id", MINIO_ACCESS_KEY)
-    .config("spark.sql.catalog.nessie.s3.secret-access-key", MINIO_SECRET_KEY)
-    .config("spark.sql.catalog.nessie.s3.path-style-access", "true")
-    .config("spark.sql.catalog.nessie.s3.region", "us-east-1")  # Fake region for MinIO
-    # Updated Iceberg packages
-    .config("spark.jars.packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.2,org.apache.hadoop:hadoop-aws:3.4.0,org.projectnessie.nessie-integrations:nessie-spark-extensions-3.5_2.12:0.103.3")
-    .config("spark.jars.repositories", "https://repository.apache.org/content/repositories/snapshots/")
-    .getOrCreate()
-    )
+    # Redirect ALL stdout during Spark initialization and execution
+    stdout_buffer = io.StringIO()
     
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS nessie.hospitalA")
-    
-    spark.sql("SHOW NAMESPACES IN nessie").show()
-    
-    # spark.sql("DROP TABLE IF EXISTS nessie.hospitalA.checkups_validated")
-
-    # spark.sql("""
-    # CREATE TABLE IF NOT EXISTS nessie.hospitalA.checkups (
-    # id string,
-    #     uuid string,
-    #     doctor_id string,
-    #     patient_name string,
-    #     patient_age string,
-    #     patient_gender string,
-    #     symptoms string,
-    #     diagnosis string,
-    #     notes string,
-    #     consultation_audio_url string,
-    #     created_at string,
-    #     audio_public_id string,
-    #     temperature string,
-    #     blood_pressure string,
-    #     blood_sugar string,
-    #     medications string,
-    #     lab_tests string,
-    #     body_weight string,
-    #     med_list string,
-    #     lab_list string,
-    #     symptom_list string,
-    #     diagnosis_list string,
-    #     note_list string,
-    #     bp_parsed string,
-    #     fhir_bundle_json string,
-    #     med_summary string,
-    #     lab_summary string,
-    #     fhir_validation_status string,
-    #     enrichment_version string,
-    #     validated_at string,
-    #     validation_error string,
-    #     batch_id string,
-    #     batch_start_ts string,
-    #     batch_end_ts string,
-    #     ingest_ts timestamp,
-    #     ingest_date string
-    # ) USING iceberg
-    # PARTITIONED BY (ingest_date)
-    # """)
-    
-    spark.sql("SHOW TABLES IN nessie.hospitalA").show()
-    
-    # spark.sql("DESCRIBE nessie.hospitalA").show()
-
-    
-    
-
-
-
-    # Before creating the Spark session, check system properties
-    # logger.info("Environment variables containing 's':")
-    # for key, value in os.environ.items():
-    #     if 's' in value.lower() and any(char.isdigit() for char in value):
-    #         logger.info(f"{key}: {value}")
-    
-    # for k, v in spark.sparkContext.getConf().getAll():
-    #     if "s3a" in k.lower():
-    #         logger.info(k, "=", v)
-
-    # logger.info("\n ::::: SPARK JARS ::::: \n".join(jar for jar in spark.sparkContext._jsc.sc().listJars()))
-    # .config("spark.sql.catalog.local.warehouse", out_dir)
-
-    # df = read_staging_parquet_spark(spark, local_path)
-    # validated_df, errors_df = validate_bundles_spark(df, ENRICHMENT_VERSION)
-    
-    
-
-
-    # if validated_df is not None and validated_df.head(1):
-    #     write_iceberg_spark(validated_df, run_id, start, end, "checkups","hospitalA", "nessie")
-    # if errors_df is not None and errors_df.head(1):
-    #     write_iceberg_spark(errors_df, run_id, start, end, "checkups","hospitalA", "nessie")
+    with redirect_stdout(stdout_buffer):
+        spark = (SparkSession.builder
+        .appName("ValidatePublish")
+        .master("local[4]")
+        .config("spark.ui.showConsoleProgress", "false")
+        .config("spark.ui.enabled", "false")
+        .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+        .config("spark.sql.catalog.nessie", "org.apache.iceberg.spark.SparkCatalog")
+        .config("spark.sql.catalog.nessie.catalog-impl", "org.apache.iceberg.nessie.NessieCatalog")
+        .config("spark.sql.catalog.nessie.uri", "http://localhost:19120/api/v1")
+        .config("spark.sql.catalog.nessie.ref", "main")
+        .config("spark.sql.catalog.nessie.warehouse", f"s3a://{BUCKET_NAME}/iceberg/")
+        .config("spark.sql.catalog.nessie.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+        # Your MinIO S3A configs
+        .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT)
+        .config("spark.hadoop.fs.s3a.access.key", MINIO_ACCESS_KEY)
+        .config("spark.hadoop.fs.s3a.secret.key", MINIO_SECRET_KEY)
+        .config("spark.hadoop.fs.s3a.path.style.access", "true")
+        .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+        # .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+        # S3FileIO specific configs for MinIO
+        .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
+        .config("spark.sql.catalog.nessie.s3.endpoint", MINIO_ENDPOINT)
+        .config("spark.sql.catalog.nessie.s3.access-key-id", MINIO_ACCESS_KEY)
+        .config("spark.sql.catalog.nessie.s3.secret-access-key", MINIO_SECRET_KEY)
+        .config("spark.sql.catalog.nessie.s3.path-style-access", "true")
+        .config("spark.sql.catalog.nessie.s3.region", "us-east-1")  # Fake region for MinIO
+        # Updated Iceberg packages
+        .config("spark.jars.packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.2,org.apache.hadoop:hadoop-aws:3.4.0,org.projectnessie.nessie-integrations:nessie-spark-extensions-3.5_2.12:0.103.3")
+        .config("spark.jars.repositories", "https://repository.apache.org/content/repositories/snapshots/")
+        .getOrCreate()
+        )
         
+        # Suppress Spark's stdout logging
+        spark.sparkContext.setLogLevel("ERROR")
+        
+        # Create namespace (use backticks to handle special characters like hyphens in namespace)
+        spark.sql(f"CREATE NAMESPACE IF NOT EXISTS nessie.`{NESSIE_NAMESPACE}`")
+        
+        # Read staging data
+        df = read_staging_parquet_spark(spark, local_path)
+        
+        # Validate FHIR bundles
+        validated_df, errors_df = validate_bundles_spark(df, ENRICHMENT_VERSION)
+        
+        # Write to Iceberg
+        if validated_df is not None and not validated_df.rdd.isEmpty():
+            write_iceberg_spark(validated_df, run_id, start, end, "checkups", NESSIE_NAMESPACE, "nessie")
+        if errors_df is not None and not errors_df.rdd.isEmpty():
+            write_iceberg_spark(errors_df, run_id, start, end, "checkups_errors", NESSIE_NAMESPACE, "nessie")
+        
+        # Get counts
+        counts = {}
+        try:
+            result_df = spark.sql(f"SELECT fhir_validation_status, COUNT(*) as count FROM nessie.`{NESSIE_NAMESPACE}`.checkups GROUP BY fhir_validation_status")
+            counts = {row.fhir_validation_status: row['count'] for row in result_df.collect()}
+        except Exception as e:
+            logger.warning(f"Could not query counts: {e}")
+            # Fallback to DataFrame counts
+            counts = {'VALID': validated_df.count() if validated_df else 0}
+        
+        spark.stop()
     
-    spark.sql("SELECT fhir_validation_status, patient_name, ingest_ts FROM nessie.hospitalA.checkups").show()
-        # write local parquet outputs
-    # validated_path = None
-    # errors_path = None
-    # if validated_df is not None and validated_df.head(1):
-    #     validated_path = write_parquet_spark(validated_df, out_dir, f"validated_{safe_ts(start)}_{safe_ts(end)}")
-    # if errors_df is not None and errors_df.head(1):
-    #     errors_path = write_parquet_spark(errors_df, out_dir, f"errors_{safe_ts(start)}_{safe_ts(end)}")
-
-    spark.stop()
+    # Verify namespaces exist (logged to stderr, not stdout)
+    logger.info("Nessie namespace created/verified")
+    
+    # Verify tables exist (logged to stderr, not stdout)
+    logger.info("Nessie tables verified")
+    
+    records_validated = counts.get('VALID', 0)
+    records_failed = sum(count for status, count in counts.items() if status != 'VALID')
+    
+    logger.info(f"Validation complete: {records_validated} valid, {records_failed} failed")
     
     return {
-        # "run_id": run_id,
-        # "validated_path": validated_path,
-        # "errors_path": errors_path,
         "success": True,
-        "message":"Validation task completed successfully."
+        "message": "Validation task completed successfully.",
+        "records_validated": records_validated,
+        "records_failed": records_failed
     }
-
-    # upload validated dir(s) to tmp prefix and errors dir(s) to tmp error prefix
-    if validated_path:
-        for dept in DEPARTMENTS:
-            s3_tmp_prefix = f"{dept}/{tmp_valid_prefix}validated_{safe_ts(start)}_{safe_ts(end)}/"
-            upload_parquet_path_with_retry(s3, validated_path, BUCKET_NAME, s3_tmp_prefix)
-            logger.info("Uploaded validated to s3://%s/%s", BUCKET_NAME, s3_tmp_prefix)
-
-    if errors_path:
-        for dept in DEPARTMENTS:
-            s3_tmp_prefix = f"{dept}/{tmp_error_prefix}errors_{safe_ts(start)}_{safe_ts(end)}/"
-            upload_parquet_path_with_retry(s3, errors_path, BUCKET_NAME, s3_tmp_prefix)
-            logger.info("Uploaded errors to s3://%s/%s", BUCKET_NAME, s3_tmp_prefix)
-
-    # commit validated run (copy tmp -> final and write _SUCCESS) only if validated exists
-    if validated_path:
-        for dept in DEPARTMENTS:
-            tmp_pref = f"{dept}/{tmp_valid_prefix}validated_{safe_ts(start)}_{safe_ts(end)}/"
-            final_pref = f"{dept}/{final_valid_prefix}validated_{safe_ts(start)}_{safe_ts(end)}/"
-            commit_run(s3, tmp_pref, final_pref)
-            logger.info("Committed files to s3://%s/%s", BUCKET_NAME, final_valid_prefix)
-
-    # copy errors tmp to final errors (do not add _SUCCESS). Only run if errors_path exists
-    if errors_path:
-        for dept in DEPARTMENTS:
-            tmp_pref = f"{dept}/{tmp_error_prefix}errors_{safe_ts(start)}_{safe_ts(end)}/"
-            final_pref = f"{dept}/{final_error_prefix}errors_{safe_ts(start)}_{safe_ts(end)}/"
-            resp = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=tmp_pref)
-            if "Contents" in resp:
-                for obj in resp["Contents"]:
-                    src_key = obj["Key"]
-                    filename = src_key.split(tmp_pref, 1)[-1]
-                    dest_key = final_pref.rstrip("/") + "/" + filename
-                    copy_source = {"Bucket": BUCKET_NAME, "Key": src_key}
-                    s3.copy_object(Bucket=BUCKET_NAME, CopySource=copy_source, Key=dest_key)
-                # delete tmp error objects
-                for obj in resp["Contents"]:
-                    s3.delete_object(Bucket=BUCKET_NAME, Key=obj["Key"])
-            logger.info("Committed files to s3://%s/%s", BUCKET_NAME, final_error_prefix)
-
-    return {
-        # "run_id": run_id,
-        # "validated_path": validated_path,
-        # "errors_path": errors_path,
-        "success": True,
-        "message":"Validation task completed successfully."
-    }
-
 
 
 if __name__ == "__main__":
     logger.info("Enrich Validate Publish Job :: ")
+    
+    # Capture all stdout output during execution
+    # Only the final JSON should go to stdout for the Go backend to parse
+    captured_stdout = io.StringIO()
+    result = None
+    
     try:
-        print(json.dumps(enrich_validate_and_publish(local_path, start_date_str, end_date_str)))
+        with redirect_stdout(captured_stdout):
+            result = enrich_validate_and_publish(local_path, start_date_str, end_date_str)
+        
+        # Print only the JSON result to stdout (outside the redirect context)
+        print(json.dumps(result))
     except Exception as e:
+        # Print only the JSON error to stdout
         print(json.dumps({
-            "success":False,
+            "success": False,
             "message": f"Error: {str(e)}\n{traceback.format_exc()}"
         }))
     

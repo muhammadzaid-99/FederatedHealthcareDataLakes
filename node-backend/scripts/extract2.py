@@ -40,20 +40,38 @@ end_date_str = sys.argv[2]
 
 
 # ------------------- CONFIG -------------------
-JDBC_URL = "jdbc:postgresql://localhost:5432/hms"
-DB_TABLE = "checkups"
-DB_USER = "postgres"
-DB_PASSWORD = "12345678"
-JDBC_DRIVER_FILENAME = "postgresql-42.7.7.jar"
-JDBC_DRIVER_PATH = os.path.abspath(JDBC_DRIVER_FILENAME)
+# Read from environment variables (set by Go backend) - REQUIRED, no defaults
+REQUIRED_ENV_VARS = {
+    "JDBC_URL": os.environ.get("JDBC_URL"),
+    "DB_TABLE": os.environ.get("DB_TABLE"),
+    "DB_USER": os.environ.get("DB_USER"),
+    "DB_PASSWORD": os.environ.get("DB_PASSWORD"),
+    "JDBC_DRIVER_PATH": os.environ.get("JDBC_DRIVER_PATH"),
+    "OUTPUT_DIR": os.environ.get("OUTPUT_DIR"),
+    "MINIO_ENDPOINT": os.environ.get("MINIO_ENDPOINT"),
+    "MINIO_ACCESS_KEY": os.environ.get("MINIO_ACCESS_KEY"),
+    "MINIO_SECRET_KEY": os.environ.get("MINIO_SECRET_KEY"),
+    "BUCKET_NAME": os.environ.get("BUCKET_NAME"),
+}
 
-OUTPUT_DIR = os.path.abspath("parquet")
+# Fail fast if any required env var is missing or empty
+missing_vars = [name for name, value in REQUIRED_ENV_VARS.items() if not value]
+if missing_vars:
+    error_msg = f"Missing or empty required environment variables: {', '.join(missing_vars)}"
+    print(json.dumps({"success": False, "message": error_msg}), flush=True)
+    sys.exit(1)
 
-MINIO_ENDPOINT = "http://localhost:9000"
-MINIO_ACCESS_KEY = "etluser"
-MINIO_SECRET_KEY = "etlpass123"
-BUCKET_NAME = "hospital-data"
-# BUCKET_NAME = os.environ.get("BUCKET_NAME", "my-bucket")
+# Assign to constants after validation
+JDBC_URL = REQUIRED_ENV_VARS["JDBC_URL"]
+DB_TABLE = REQUIRED_ENV_VARS["DB_TABLE"]
+DB_USER = REQUIRED_ENV_VARS["DB_USER"]
+DB_PASSWORD = REQUIRED_ENV_VARS["DB_PASSWORD"]
+JDBC_DRIVER_PATH = REQUIRED_ENV_VARS["JDBC_DRIVER_PATH"]
+OUTPUT_DIR = REQUIRED_ENV_VARS["OUTPUT_DIR"]
+MINIO_ENDPOINT = REQUIRED_ENV_VARS["MINIO_ENDPOINT"]
+MINIO_ACCESS_KEY = REQUIRED_ENV_VARS["MINIO_ACCESS_KEY"]
+MINIO_SECRET_KEY = REQUIRED_ENV_VARS["MINIO_SECRET_KEY"]
+BUCKET_NAME = REQUIRED_ENV_VARS["BUCKET_NAME"]
 DEPARTMENTS = ["cardiology", "neurology"]
 ENRICHMENT_VERSION = "v1"  # bump this when enrichment logic changes
 

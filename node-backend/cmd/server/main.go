@@ -56,11 +56,26 @@ func main() {
 	tokenService := services.NewTokenService(cfg)
 	rabbitMQService := services.NewRabbitMQService(cfg)
 	etlService := services.NewETLService(database.DB)
+	centralAPIService := services.NewCentralAPIService(cfg, tokenService)
+
+	// Get ETL config for MinIO credentials (needed for STS)
+	var etlConfig models.ETLConfig
+	if err := database.DB.First(&etlConfig).Error; err != nil {
+		logrus.Warn("ETL config not found, data request service will use defaults")
+	}
+	dataRequestService := services.NewDataRequestService(
+		database.DB,
+		etlConfig.MinioEndpoint,
+		etlConfig.MinioAccessKey,
+		etlConfig.MinioSecretKey,
+		centralAPIService,
+	)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
 	nodeHandler := handlers.NewNodeHandler(cfg, rabbitMQService)
 	etlHandler := handlers.NewETLHandler(etlService)
+	dataRequestHandler := handlers.NewDataRequestHandler(dataRequestService)
 
 	// Check if node is already configured and start RabbitMQ listener
 	go func() {
@@ -92,7 +107,7 @@ func main() {
 	}()
 
 	// Setup router
-	routerInstance := api.NewRouter(cfg, authHandler, nodeHandler, etlHandler, authService, tokenService)
+	routerInstance := api.NewRouter(cfg, authHandler, nodeHandler, etlHandler, dataRequestHandler, authService, tokenService)
 	router := routerInstance.Setup()
 
 	// Create HTTP server

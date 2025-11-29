@@ -27,9 +27,34 @@ export interface DataAccessRequest {
   data_query: any  // JSONB object
   purpose: string
   status: string
-  responses?: any[]
+  responses?: NodeAccessResponse[]
   created_at: string
   expires_at: string
+  updated_at: string
+}
+
+export interface NodeAccessResponse {
+  id: string
+  request_id: string
+  hospital_id: string
+  status: string
+  presigned_url?: string
+  valid_until?: string
+  responded_at?: string
+  notes?: string
+  // STS Credentials
+  access_key_id?: string
+  secret_access_key?: string
+  session_token?: string
+  cred_expiration?: string
+  // Date range
+  date_range_start?: string
+  date_range_end?: string
+  // Policy
+  policy_json?: string
+  // Hospital info (joined)
+  hospital?: Hospital
+  created_at: string
   updated_at: string
 }
 
@@ -149,7 +174,7 @@ class APIClient {
     return response.json()
   }
 
-  async getRequestStatus(requestId: string): Promise<DataAccessRequest> {
+  async getRequestStatus(requestId: string): Promise<{ request: DataAccessRequest }> {
     const response = await fetch(`${API_BASE}/requests/${requestId}`, {
       headers: this.getHeaders(),
       credentials: 'include',
@@ -160,6 +185,11 @@ class APIClient {
     }
 
     return response.json()
+  }
+
+  async getRequestById(requestId: string): Promise<DataAccessRequest> {
+    const data = await this.getRequestStatus(requestId)
+    return data.request
   }
 
   // Hospital-specific endpoints

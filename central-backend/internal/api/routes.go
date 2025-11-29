@@ -148,10 +148,10 @@ func (r *Router) Setup() *gin.Engine {
 			requests.GET("/:id", r.requestHandler.GetRequest)
 			requests.GET("", r.requestHandler.ListRequests)
 
-			// Response submission (requires authentication - both nodes and hospitals can respond)
-			requestAuth := requests.Use(middleware.AuthMiddleware(r.authService))
+			// Response submission (requires authentication - nodes can respond)
+			nodeRequestAuth := requests.Use(middleware.AuthMiddleware(r.authService), middleware.NodeOnly())
 			{
-				requestAuth.POST("/:id/responses", r.requestHandler.SubmitResponse)
+				nodeRequestAuth.POST("/:id/responses", r.requestHandler.SubmitResponse)
 			}
 		}
 	}

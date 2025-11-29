@@ -105,6 +105,7 @@ func (s *RequestService) CreateAccessRequest(
 func (s *RequestService) routeRequestToNodes(request *models.DataAccessRequest, hospitals []models.Hospital) error {
 	// Prepare message payload
 	payload := map[string]interface{}{
+		"type":            "data_request", // Message type for node-backend processing
 		"request_id":      request.ID.String(),
 		"requestor_id":    request.RequestorID,
 		"requestor_email": request.RequestorEmail,
@@ -138,11 +139,23 @@ func (s *RequestService) routeRequestToNodes(request *models.DataAccessRequest, 
 	return nil
 }
 
+// NodeResponseCredentials contains the STS credentials sent by a hospital node
+type NodeResponseCredentials struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+	CredExpiration  *time.Time
+	DateRangeStart  string
+	DateRangeEnd    string
+	PolicyJSON      string
+}
+
 // SubmitNodeResponse handles a hospital node's response to an access request
 func (s *RequestService) SubmitNodeResponse(
 	requestID, hospitalID uuid.UUID,
 	status, presignedURL, notes string,
 	validUntil *time.Time,
+	creds NodeResponseCredentials,
 ) (*models.NodeAccessResponse, error) {
 	// Find the response entry
 	var response models.NodeAccessResponse
@@ -163,6 +176,17 @@ func (s *RequestService) SubmitNodeResponse(
 	response.ValidUntil = validUntil
 	now := time.Now()
 	response.RespondedAt = &now
+
+	// Add credentials if approved
+	if status == models.ResponseStatusApproved {
+		response.AccessKeyID = creds.AccessKeyID
+		response.SecretAccessKey = creds.SecretAccessKey
+		response.SessionToken = creds.SessionToken
+		response.CredExpiration = creds.CredExpiration
+		response.DateRangeStart = creds.DateRangeStart
+		response.DateRangeEnd = creds.DateRangeEnd
+		response.PolicyJSON = creds.PolicyJSON
+	}
 
 	if err := database.DB.Save(&response).Error; err != nil {
 		return nil, fmt.Errorf("failed to update response: %w", err)
