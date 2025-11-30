@@ -81,7 +81,9 @@ services:
     networks:
       - central-network
 
-  # Project Nessie - Metadata Catalog with PostgreSQL Backend
+  # Project Nessie - Git-like Version Control for Data Lakes
+  # NOTE: We use Nessie ONLY as a metadata version control system (Git API).
+  # The Iceberg REST Catalog functionality is handled by central-proxy.
   nessie:
     image: ghcr.io/projectnessie/nessie:latest
     container_name: central-nessie
@@ -92,6 +94,7 @@ services:
       QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres-nessie:5432/nessie
       QUARKUS_DATASOURCE_USERNAME: nessie
       QUARKUS_DATASOURCE_PASSWORD: nessiepass
+      # NO Iceberg Catalog config - central-proxy handles Iceberg REST
     ports:
       - "19120:19120"
     depends_on:
@@ -205,6 +208,58 @@ services:
   #   networks:
   #     - central-network
   #   restart: unless-stopped
+
+  # Central Proxy - Virtual S3 Gateway and Metadata Interceptor
+  central-proxy:
+    build:
+      context: ./central-proxy
+      dockerfile: Dockerfile
+    container_name: central-proxy
+    environment:
+      PROXY_PORT: 8081
+      PROXY_ENV: development
+      LOG_LEVEL: debug
+      # Connect to central-backend's PostgreSQL (read-only access)
+      DB_HOST: postgres-central
+      DB_PORT: 5432
+      DB_NAME: centraldb
+      DB_USER: central
+      DB_PASSWORD: centralpass
+      DB_SSL_MODE: disable
+      # Nessie endpoint for metadata proxying
+      NESSIE_ENDPOINT: http://nessie:19120
+      # Cache settings
+      CACHE_CREDENTIAL_TTL: 300
+      CACHE_HOSPITAL_TTL: 600
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres-central:
+        condition: service_healthy
+      nessie:
+        condition: service_healthy
+    networks:
+      - central-network
+    restart: unless-stopped
+
+  # Trino - Distributed SQL Query Engine for Iceberg
+  trino:
+    image: trinodb/trino:464
+    container_name: trino
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
+      - ./trino/etc:/etc/trino/etc:ro
+    environment:
+      # Java memory settings
+      JAVA_TOOL_OPTIONS: "-Xmx2G"
+    depends_on:
+      - central-proxy
+      - nessie
+    networks:
+      - central-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:

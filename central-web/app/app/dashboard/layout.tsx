@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Hospital, Users, FileText, LogOut, Activity } from 'lucide-react'
+import { Hospital, Users, FileText, LogOut, Activity, Terminal } from 'lucide-react'
 
 export default function DashboardLayout({
   children,
@@ -65,6 +65,7 @@ export default function DashboardLayout({
     { href: '/dashboard/pending', icon: Users, label: 'Pending Registrations' },
     { href: '/dashboard/hospitals', icon: Hospital, label: 'All Hospitals' },
     { href: '/dashboard/requests', icon: FileText, label: 'Data Requests' },
+    { href: '/dashboard/query', icon: Terminal, label: 'Query Console' },
   ]
 
   return (

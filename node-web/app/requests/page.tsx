@@ -70,6 +70,7 @@ export default function RequestsPage() {
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<DataRequest | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [credentialExpirySeconds, setCredentialExpirySeconds] = useState<number>(3600);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approving, setApproving] = useState(false);
 
@@ -123,12 +124,13 @@ export default function RequestsPage() {
         approved_by: user?.username || 'admin',
         date_range_start: format(dateRange.from, 'yyyy-MM-dd'),
         date_range_end: format(dateRange.to, 'yyyy-MM-dd'),
-        duration_seconds: 3600,
+        duration_seconds: credentialExpirySeconds,
         notes: approvalNotes,
       });
       setApproveModalOpen(false);
       setSelectedRequest(null);
       setDateRange(undefined);
+      setCredentialExpirySeconds(3600);
       setApprovalNotes('');
       fetchRequests();
     } catch (err) {
@@ -166,6 +168,7 @@ export default function RequestsPage() {
   const openApproveModal = (request: DataRequest) => {
     setSelectedRequest(request);
     setDateRange(undefined);
+    setCredentialExpirySeconds(3600);
     setApprovalNotes('');
     setApproveModalOpen(true);
   };
@@ -377,6 +380,27 @@ export default function RequestsPage() {
                 <div className="flex justify-center">
                   <DateRangePicker value={dateRange} onChange={setDateRange} />
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">
+                  Credential Expiry (seconds)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={900}
+                    max={604800}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={credentialExpirySeconds}
+                    onChange={(e) => setCredentialExpirySeconds(Number(e.target.value))}
+                  />
+                  <span className="text-sm text-gray-500">
+                    ({Math.floor(credentialExpirySeconds / 3600)}h {Math.floor((credentialExpirySeconds % 3600) / 60)}m)
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Min: 900 (15 min), Max: 604800 (7 days). Default: 3600 (1 hour).
+                </p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-2">
