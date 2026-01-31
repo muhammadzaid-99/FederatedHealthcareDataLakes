@@ -214,3 +214,72 @@ func (s *AuthService) InitializeDefaultAdmin() error {
 
 	return nil
 }
+
+// RegisterRequestor creates a new requestor account with pending status
+func (s *AuthService) RegisterRequestor(name, email, password, organization string) (*models.Requestor, error) {
+	// Check if email already exists
+	var count int64
+	if err := database.DB.Model(&models.Requestor{}).Where("email = ?", email).Count(&count).Error; err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	if count > 0 {
+		return nil, errors.New("email already registered")
+	}
+
+	// Hash password
+	hashedPassword, err := s.HashPassword(password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	requestor := &models.Requestor{
+		Name:         name,
+		Email:        email,
+		PasswordHash: hashedPassword,
+		Organization: organization,
+		Status:       models.RequestorStatusPending,
+	}
+
+	if err := database.DB.Create(requestor).Error; err != nil {
+		return nil, fmt.Errorf("failed to create requestor: %w", err)
+	}
+
+	return requestor, nil
+}
+
+// AuthenticateRequestor authenticates a requestor using email and password
+func (s *AuthService) AuthenticateRequestor(email, password string) (*models.Requestor, error) {
+	var requestor models.Requestor
+
+	// Find requestor by email
+	if err := database.DB.Where("email = ?", email).First(&requestor).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("invalid credentials")
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	// Verify password
+	if err := bcrypt.CompareHashAndPassword([]byte(requestor.PasswordHash), []byte(password)); err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	// Check if requestor is approved
+	if requestor.Status != models.RequestorStatusApproved {
+		return nil, fmt.Errorf("account is not approved (status: %s)", requestor.Status)
+	}
+
+	return &requestor, nil
+}
+
+// GetRequestorByID gets a requestor by ID
+func (s *AuthService) GetRequestorByID(id uuid.UUID) (*models.Requestor, error) {
+	var requestor models.Requestor
+	if err := database.DB.First(&requestor, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("requestor not found")
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	return &requestor, nil
+}

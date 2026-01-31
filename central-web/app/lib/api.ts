@@ -47,6 +47,8 @@ export interface NodeAccessResponse {
   secret_access_key?: string
   session_token?: string
   cred_expiration?: string
+  // Departments
+  departments?: string[]
   // Date range
   date_range_start?: string
   date_range_end?: string

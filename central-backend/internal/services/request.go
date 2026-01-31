@@ -24,10 +24,11 @@ func NewRequestService(rabbitMQ *RabbitMQService, auditService *AuditService) *R
 }
 
 // CreateAccessRequest creates a new data access request and routes it to hospitals
+// This is the legacy function for admin-initiated requests
 func (s *RequestService) CreateAccessRequest(
-	requestorID, requestorEmail string,
+	requestorID uuid.UUID,
 	requestedNodes []string,
-	dataQuery map[string]interface{},
+	departments []string,
 	purpose string,
 	expiresAt time.Time,
 ) (*models.DataAccessRequest, error) {
@@ -50,9 +51,8 @@ func (s *RequestService) CreateAccessRequest(
 	// Create request
 	request := &models.DataAccessRequest{
 		RequestorID:    requestorID,
-		RequestorEmail: requestorEmail,
 		RequestedNodes: convertToJSONBArray(requestedNodes),
-		DataQuery:      convertToJSONB(dataQuery),
+		Departments:    departments,
 		Purpose:        purpose,
 		Status:         models.RequestStatusPending,
 		ExpiresAt:      expiresAt,
@@ -87,7 +87,7 @@ func (s *RequestService) CreateAccessRequest(
 	database.DB.Save(request)
 
 	// Audit log
-	s.auditService.Log("request", request.ID.String(), "create", requestorID, models.JSONB{
+	s.auditService.Log("request", request.ID.String(), "create", requestorID.String(), models.JSONB{
 		"hospitals_count": len(requestedNodes),
 		"purpose":         purpose,
 	})
@@ -105,14 +105,13 @@ func (s *RequestService) CreateAccessRequest(
 func (s *RequestService) routeRequestToNodes(request *models.DataAccessRequest, hospitals []models.Hospital) error {
 	// Prepare message payload
 	payload := map[string]interface{}{
-		"type":            "data_request", // Message type for node-backend processing
-		"request_id":      request.ID.String(),
-		"requestor_id":    request.RequestorID,
-		"requestor_email": request.RequestorEmail,
-		"data_query":      request.DataQuery,
-		"purpose":         request.Purpose,
-		"expires_at":      request.ExpiresAt,
-		"created_at":      request.CreatedAt,
+		"type":         "data_request", // Message type for node-backend processing
+		"request_id":   request.ID.String(),
+		"requestor_id": request.RequestorID.String(),
+		"departments":  request.Departments,
+		"purpose":      request.Purpose,
+		"expires_at":   request.ExpiresAt,
+		"created_at":   request.CreatedAt,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -145,6 +144,7 @@ type NodeResponseCredentials struct {
 	SecretAccessKey string
 	SessionToken    string
 	CredExpiration  *time.Time
+	Departments     []string
 	DateRangeStart  string
 	DateRangeEnd    string
 	PolicyJSON      string
@@ -183,6 +183,7 @@ func (s *RequestService) SubmitNodeResponse(
 		response.SecretAccessKey = creds.SecretAccessKey
 		response.SessionToken = creds.SessionToken
 		response.CredExpiration = creds.CredExpiration
+		response.Departments = creds.Departments
 		response.DateRangeStart = creds.DateRangeStart
 		response.DateRangeEnd = creds.DateRangeEnd
 		response.PolicyJSON = creds.PolicyJSON
@@ -319,4 +320,190 @@ func convertToJSONBArray(data []string) models.JSONBArray {
 		result[i] = v
 	}
 	return result
+}
+
+// ============================================================
+// REQUESTOR-SPECIFIC METHODS
+// ============================================================
+
+// GetRequestorByID retrieves a requestor by their ID
+func (s *RequestService) GetRequestorByID(requestorID uuid.UUID) (*models.Requestor, error) {
+	var requestor models.Requestor
+	if err := database.DB.First(&requestor, "id = ?", requestorID).Error; err != nil {
+		return nil, fmt.Errorf("requestor not found: %w", err)
+	}
+	return &requestor, nil
+}
+
+// GetRequestsByRequestorID retrieves all requests for a specific requestor
+func (s *RequestService) GetRequestsByRequestorID(requestorID uuid.UUID, status string, limit, offset int) ([]models.DataAccessRequest, int64, error) {
+	var requests []models.DataAccessRequest
+	var total int64
+
+	query := database.DB.Model(&models.DataAccessRequest{}).Where("requestor_id = ?", requestorID)
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	// Get total count
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count requests: %w", err)
+	}
+
+	// Get paginated results with responses
+	if err := query.Preload("Responses.Hospital").
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&requests).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch requests: %w", err)
+	}
+
+	return requests, total, nil
+}
+
+// CreateRequestorAccessRequest creates a new data access request for a requestor
+func (s *RequestService) CreateRequestorAccessRequest(
+	requestorID uuid.UUID,
+	requestedNodes []string,
+	departments []string,
+	purpose string,
+	expiresAt time.Time,
+) (*models.DataAccessRequest, error) {
+	// Validate requested nodes
+	if len(requestedNodes) == 0 {
+		return nil, fmt.Errorf("at least one hospital node must be requested")
+	}
+
+	// Get requestor for email (for queue message)
+	var requestor models.Requestor
+	if err := database.DB.First(&requestor, "id = ?", requestorID).Error; err != nil {
+		return nil, fmt.Errorf("requestor not found: %w", err)
+	}
+
+	// Verify hospitals exist and are active
+	var hospitals []models.Hospital
+	if err := database.DB.Where("id IN ? AND status = ?", requestedNodes, models.HospitalStatusActive).
+		Find(&hospitals).Error; err != nil {
+		return nil, fmt.Errorf("failed to verify hospitals: %w", err)
+	}
+
+	if len(hospitals) != len(requestedNodes) {
+		return nil, fmt.Errorf("some requested hospitals are not active or do not exist")
+	}
+
+	// Create request
+	request := &models.DataAccessRequest{
+		RequestorID:    requestorID,
+		RequestedNodes: convertToJSONBArray(requestedNodes),
+		Departments:    departments,
+		Purpose:        purpose,
+		Status:         models.RequestStatusPending,
+		ExpiresAt:      expiresAt,
+	}
+
+	if err := database.DB.Create(request).Error; err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Create response entries for each hospital
+	for _, hospital := range hospitals {
+		response := &models.NodeAccessResponse{
+			RequestID:  request.ID,
+			HospitalID: hospital.ID,
+			Status:     models.ResponseStatusPending,
+		}
+
+		if err := database.DB.Create(response).Error; err != nil {
+			logrus.WithError(err).Error("Failed to create node response entry")
+			continue
+		}
+	}
+
+	// Publish request to hospital queues
+	if err := s.routeRequestorRequestToNodes(request, hospitals, &requestor); err != nil {
+		logrus.WithError(err).Error("Failed to route request to all nodes")
+	}
+
+	// Update status to forwarded
+	request.Status = models.RequestStatusForwarded
+	database.DB.Save(request)
+
+	// Audit log
+	s.auditService.Log("request", request.ID.String(), "create", requestorID.String(), models.JSONB{
+		"hospitals_count": len(requestedNodes),
+		"purpose":         purpose,
+		"departments":     departments,
+	})
+
+	logrus.WithFields(logrus.Fields{
+		"request_id":      request.ID,
+		"requestor_id":    requestorID,
+		"hospitals_count": len(requestedNodes),
+	}).Info("Access request created and forwarded")
+
+	return request, nil
+}
+
+// routeRequestorRequestToNodes publishes the access request to each hospital's queue
+func (s *RequestService) routeRequestorRequestToNodes(request *models.DataAccessRequest, hospitals []models.Hospital, requestor *models.Requestor) error {
+	// Prepare message payload
+	payload := map[string]interface{}{
+		"type":            "data_request",
+		"request_id":      request.ID.String(),
+		"requestor_id":    request.RequestorID.String(),
+		"requestor_email": requestor.Email,
+		"requestor_name":  requestor.Name,
+		"requestor_org":   requestor.Organization,
+		"departments":     request.Departments,
+		"purpose":         request.Purpose,
+		"expires_at":      request.ExpiresAt,
+		"created_at":      request.CreatedAt,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Publish to each hospital's queue
+	for _, hospital := range hospitals {
+		if err := s.rabbitMQ.PublishAccessRequest(
+			hospital.ID.String(),
+			request.ID.String(),
+			payloadBytes,
+		); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"hospital_id": hospital.ID,
+				"request_id":  request.ID,
+				"error":       err,
+			}).Error("Failed to publish request to hospital queue")
+		}
+	}
+
+	return nil
+}
+
+// GetRequestByIDForRequestor retrieves a request ensuring it belongs to the requestor
+func (s *RequestService) GetRequestByIDForRequestor(requestID, requestorID uuid.UUID) (*models.DataAccessRequest, error) {
+	var request models.DataAccessRequest
+
+	if err := database.DB.Preload("Responses.Hospital").Preload("Requestor").
+		First(&request, "id = ? AND requestor_id = ?", requestID, requestorID).Error; err != nil {
+		return nil, fmt.Errorf("request not found: %w", err)
+	}
+
+	return &request, nil
+}
+
+// GetActiveHospitals returns list of active hospitals
+func (s *RequestService) GetActiveHospitals() ([]models.Hospital, error) {
+	var hospitals []models.Hospital
+	if err := database.DB.Where("status = ?", models.HospitalStatusActive).
+		Select("id", "name", "admin_email", "status", "created_at").
+		Find(&hospitals).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch hospitals: %w", err)
+	}
+	return hospitals, nil
 }

@@ -1,0 +1,111 @@
+{
+"columns": [
+	{
+		"column_name" : "id",
+		"data_type" : "uuid",
+		"is_nullable" : "NO",
+		"column_default" : "gen_random_uuid()"
+	},
+	{
+		"column_name" : "uuid",
+		"data_type" : "uuid",
+		"is_nullable" : "NO",
+		"column_default" : null
+	},
+	{
+		"column_name" : "doctor_id",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "patient_name",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "patient_age",
+		"data_type" : "integer",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "patient_gender",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "symptoms",
+		"data_type" : "text",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "diagnosis",
+		"data_type" : "text",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "notes",
+		"data_type" : "text",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "consultation_audio_url",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "created_at",
+		"data_type" : "timestamp with time zone",
+		"is_nullable" : "YES",
+		"column_default" : "CURRENT_TIMESTAMP"
+	},
+	{
+		"column_name" : "temperature",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "blood_pressure",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "blood_sugar",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "body_weight",
+		"data_type" : "character varying",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "medications",
+		"data_type" : "text",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "lab_tests",
+		"data_type" : "text",
+		"is_nullable" : "YES",
+		"column_default" : null
+	},
+	{
+		"column_name" : "updated_at",
+		"data_type" : "timestamp with time zone",
+		"is_nullable" : "YES",
+		"column_default" : "CURRENT_TIMESTAMP"
+	}
+]}

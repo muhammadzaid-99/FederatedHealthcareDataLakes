@@ -29,6 +29,13 @@ const (
 	RequestStatusExpired         = "EXPIRED"
 )
 
+// Requestor status constants
+const (
+	RequestorStatusPending  = "PENDING"
+	RequestorStatusApproved = "APPROVED"
+	RequestorStatusRejected = "REJECTED"
+)
+
 // Node access response status constants
 const (
 	ResponseStatusPending  = "PENDING"
@@ -67,10 +74,9 @@ func (h *Hospital) BeforeCreate(tx *gorm.DB) error {
 // DataAccessRequest represents a request to access data from one or more hospitals
 type DataAccessRequest struct {
 	ID             uuid.UUID  `gorm:"type:uuid;primary_key" json:"id"`
-	RequestorID    string     `gorm:"type:varchar(255);not null;index" json:"requestor_id"`
-	RequestorEmail string     `gorm:"type:varchar(255)" json:"requestor_email"`
+	RequestorID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"requestor_id"`
 	RequestedNodes JSONBArray `gorm:"type:jsonb;not null" json:"requested_nodes"` // array of hospital IDs
-	DataQuery      JSONB      `gorm:"type:jsonb;not null" json:"data_query"`
+	Departments    []string   `gorm:"serializer:json" json:"departments"`         // departments requested
 	Purpose        string     `gorm:"type:text" json:"purpose"`
 	Status         string     `gorm:"type:varchar(50);not null;index" json:"status"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -78,6 +84,7 @@ type DataAccessRequest struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 
 	// Relationships
+	Requestor *Requestor           `gorm:"foreignKey:RequestorID" json:"requestor,omitempty"`
 	Responses []NodeAccessResponse `gorm:"foreignKey:RequestID" json:"responses,omitempty"`
 }
 
@@ -111,6 +118,9 @@ type NodeAccessResponse struct {
 	SecretAccessKey string     `gorm:"type:text" json:"secret_access_key,omitempty"`
 	SessionToken    string     `gorm:"type:text" json:"session_token,omitempty"`
 	CredExpiration  *time.Time `json:"cred_expiration,omitempty"`
+
+	// Departments approved for access
+	Departments []string `gorm:"serializer:json" json:"departments,omitempty"`
 
 	// Date range approved for access
 	DateRangeStart string `gorm:"type:varchar(50)" json:"date_range_start,omitempty"`
@@ -238,6 +248,29 @@ type Admin struct {
 func (a *Admin) BeforeCreate(tx *gorm.DB) error {
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
+	}
+	return nil
+}
+
+// Requestor represents a data requestor (researcher) in the system
+type Requestor struct {
+	ID           uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+	Name         string    `gorm:"type:varchar(255);not null" json:"name"`
+	Email        string    `gorm:"type:varchar(255);not null;uniqueIndex" json:"email"`
+	PasswordHash string    `gorm:"type:varchar(255);not null" json:"-"` // bcrypt hashed
+	Organization string    `gorm:"type:varchar(255)" json:"organization"`
+	Status       string    `gorm:"type:varchar(50);not null;index" json:"status"` // PENDING, APPROVED, REJECTED
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// BeforeCreate hook to generate UUID for Requestor
+func (r *Requestor) BeforeCreate(tx *gorm.DB) error {
+	if r.ID == uuid.Nil {
+		r.ID = uuid.New()
+	}
+	if r.Status == "" {
+		r.Status = RequestorStatusPending
 	}
 	return nil
 }

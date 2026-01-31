@@ -1,0 +1,501 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+model User {
+  id Int @id @default(autoincrement())
+  firstName String @map("first_name") @db.VarChar(100)
+  lastName String? @map("last_name") @db.VarChar(100)
+  email String @unique @db.VarChar(255)
+  password String @db.VarChar(255)
+  gender Gender
+  cnic String? @db.VarChar(15)
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  // Relations
+  userRoles UserRole[]
+  doctor Doctor?
+  patient Patient? @relation(name: "User")
+  labTechnician LabTechnician?
+  receptionist Receptionist?
+  pathologist Pathologist?
+  @@map("users")
+}
+
+model Role {
+  id Int @id @default(autoincrement())
+  name String @unique @db.VarChar(50)
+  description String? @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  userRoles UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id Int @id @default(autoincrement())
+  userId Int @map("user_id")
+  roleId Int @map("role_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model StandardDepartment {
+  id Int @id @default(autoincrement())
+  name String @unique @db.VarChar(100)
+  description String? @db.Text
+  code String @unique @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  departments Department[]
+
+  @@map("standard_departments")
+}
+
+model Department {
+  id Int @id @default(autoincrement())
+  name String @unique @db.VarChar(100)
+  standardDepartmentId Int @unique @map("standard_department_id")
+  description String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  // Relations
+  standardDepartment StandardDepartment @relation(fields: [standardDepartmentId], references: [id])
+  doctors Doctor[]
+  labTechnicians LabTechnician[]
+  pathologists Pathologist[]
+  labTests LabTest[]
+
+  @@map("departments")
+}
+
+model Doctor {
+  id Int @id @default(autoincrement())
+  userId Int @unique @map("user_id")
+  departmentId Int @map("department_id")
+  licenseNumber String @unique @map("license_number") @db.VarChar(50)
+  specialization String @db.VarChar(100) @default("General Practitioner")
+  experience Int @default(0)
+  qualification String @db.VarChar(255) @default("MBBS")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+  schedules DoctorSchedule[]
+
+  @@map("doctors")
+}
+
+model Patient {
+  id Int @id @default(autoincrement())
+  userId Int @unique @map("user_id")
+  dateOfBirth DateTime? @map("date_of_birth")
+  bloodGroup String? @map("blood_group") @db.VarChar(5) 
+  medicalHistory String? @map("medical_history") @db.Text
+  familyHistory String? @map("family_history") @db.Text
+  allergies String? @db.Text
+
+  address String? @db.Text
+  phoneNumber String? @map("phone_number") @db.VarChar(15)
+  emergencyContact String? @map("emergency_contact") @db.VarChar(15)
+
+  onboardingDone Boolean @default(false) @map("onboarding_done")
+  onboardedAt DateTime? @map("onboarded_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(name: "User", fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  labTests PatientLabTest[]
+
+  @@map("patients")
+}
+
+model Receptionist {
+  id Int @id @default(autoincrement())
+  userId Int @unique @map("user_id")
+  phoneNumber String @map("phone_number") @db.VarChar(15) @default("")
+  experience Int @default(0)
+  qualification String @db.VarChar(255) @default("")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walkinAppointments WalkinAppointment[] @relation(name: "WalkinAppointmentCreator")
+
+  @@map("receptionists")
+}
+
+model LabTechnician {
+  id Int @id @default(autoincrement())
+  userId Int @unique @map("user_id")
+  departmentId Int @map("department_id")
+  specialization String @db.VarChar(100) @default("")
+  qualification String @db.VarChar(255) @default("")
+  experience Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+  patientLabTests PatientLabTest[]
+
+  @@map("lab_technicians")
+}
+
+model Pathologist {
+  id Int @id @default(autoincrement())
+  userId Int @unique @map("user_id")
+  departmentId Int @map("department_id")
+  specialization String @db.VarChar(100)
+  qualification String @db.VarChar(255)
+  experience Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@map("pathologists")
+}
+
+model Drug {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(255)
+  formulaName String @db.VarChar(255)
+  chemicalFormula String @db.VarChar(255)
+  strength String @db.VarChar(100)
+  dosageForm String @db.VarChar(100)
+  description String @db.Text
+  supplier String @db.VarChar(255)
+
+  isActive Boolean @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  medications Medication[]
+
+  @@map("drugs")
+}
+
+model LabTest {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(255)
+  description String? @db.Text
+  departmentId Int @map("department_id")
+  templateId Int @map("template_id")
+
+  isActive Boolean @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  department Department @relation(fields: [departmentId], references: [id])
+  recommendedLabTests RecommendedLabTest[]
+  template LabTestTemplate @relation(fields: [templateId], references: [id])
+  patientLabTests PatientLabTest[]
+
+  @@map("lab_tests")
+}
+
+model DoctorSchedule {
+  id Int @id @default(autoincrement())
+  doctorId Int @map("doctor_id")
+  from DateTime @map("start_time")
+  to DateTime @map("end_time")
+  noOfSlots Int @map("no_of_slots")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at") // Soft deletion for schedules
+
+  // Relations
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointmentSlots AppointmentSlot[]
+
+  @@map("doctor_schedules")
+}
+
+model AppointmentSlot {
+  id Int @id @default(autoincrement())
+  scheduleId Int @map("schedule_id")
+  startTime DateTime @map("start_time")
+  endTime DateTime @map("end_time")
+  isBookable Boolean @default(true) @map("is_bookable") // If false, slot cannot be booked (e.g., blocked by doctor)
+  isBooked Boolean @default(false) @map("is_booked") // If true, slot is already booked
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at") // Soft deletion for slots (after schedule is deleted)
+
+  // Relations
+  schedule DoctorSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@map("appointment_slots")
+}
+
+model Appointment {
+  id Int @id @default(autoincrement())
+  patientId Int @map("patient_id")
+  slotId Int @map("slot_id")
+  reason String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  slot AppointmentSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  walkinAppointment WalkinAppointment?
+  onlineAppointment OnlineAppointment?
+  checkup Checkup?
+
+  @@map("appointments")
+}
+
+enum WalkinAppointmentStatus {
+  BOOKED
+  COMPLETED
+  NOT_ATTENDED
+}
+
+model WalkinAppointment {
+  id Int @id @default(autoincrement())
+  appointmentId Int @unique @map("appointment_id")
+  status WalkinAppointmentStatus @default(BOOKED)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  receptionistId Int @map("receptionist_id")
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  receptionist Receptionist @relation(name: "WalkinAppointmentCreator", fields: [receptionistId], references: [id], onDelete: Cascade)
+}
+
+enum OnlineAppointmentStatus {
+  BOOKED
+  COMPLETED
+  CANCELLED
+  NOT_ATTENDED
+}
+
+model OnlineAppointment {
+  id Int @id @default(autoincrement())
+  appointmentId Int @unique @map("appointment_id")
+  status OnlineAppointmentStatus @default(BOOKED)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+}
+
+model Checkup {
+  id Int @id @default(autoincrement())
+  appointmentId Int @unique @map("appointment_id")
+
+  bloodPressure String? @map("blood_pressure") @db.VarChar(20)
+  temperature String? @db.VarChar(20)
+  heartRate String? @map("heart_rate") @db.VarChar(20)
+  bloodSugar String? @map("blood_sugar") @db.VarChar(20)
+
+  symptoms String @db.Text
+  diagnosis String @db.Text
+  notes String? @db.Text
+  insights String? @db.Text // AI-generated insights from audio analysis (legacy)
+  gapAnalysis String? @map("gap_analysis") @db.Text // Gap analysis from AI - additional details found in conversation
+
+  isDraft Boolean @default(false) @map("is_draft") // Draft status
+
+  prescriptionId Int @unique @map("prescription_id")
+  checkupTestRecommendationId Int @unique @map("checkup_test_recommendation_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  checkupTestRecommendation CheckupTestRecommendation @relation(fields: [checkupTestRecommendationId], references: [id], onDelete: Cascade)
+  audio CheckupAudio?
+}
+
+enum AudioProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model CheckupAudio {
+  id Int @id @default(autoincrement())
+  checkupId Int @unique @map("checkup_id")
+  audioData Bytes @map("audio_data") // Store audio binary in Postgres
+  mimeType String @map("mime_type") @db.VarChar(100)
+  fileSize Int @map("file_size") // Size in bytes
+  duration Float? // Duration in seconds (optional)
+  processingStatus AudioProcessingStatus @default(PENDING) @map("processing_status")
+  transcription String? @db.Text // Original transcription of the audio consultation
+  extractedInfo Json? @map("extracted_info") // Structured clinical data extracted from audio
+  processedAt DateTime? @map("processed_at")
+  errorMessage String? @map("error_message") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  checkup Checkup @relation(fields: [checkupId], references: [id], onDelete: Cascade)
+
+  @@map("checkup_audios")
+}
+
+model Prescription {
+  id Int @id @default(autoincrement())
+
+  additionalMedications String? @map("additional_medications") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  checkup Checkup?
+  medications Medication[]
+}
+
+model Medication {
+  id Int @id @default(autoincrement())
+  drugId Int @map("drug_id")
+  prescriptionId Int @map("prescription_id")
+
+  dosePerIntake String @db.VarChar(100) // how much to take at one time (e.g. 500 mg)
+  timesPerDay Int @map("times_per_day") // how many times per day (e.g. 3)
+  totalDays Int @map("total_days") // total days (e.g. 5)
+  instructions String? @db.Text // any extra usage guidelines
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  drug Drug @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+model CheckupTestRecommendation {
+  id Int @id @default(autoincrement())
+  additionalTests String? @map("additional_tests") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  recommendedLabTests RecommendedLabTest[]
+  checkup Checkup?
+}
+
+model RecommendedLabTest {
+  id Int @id @default(autoincrement())
+  testRecommendationId Int @map("recommendation_id")
+  labTestId Int @map("lab_test_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  labTest LabTest @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  recommendation CheckupTestRecommendation @relation(fields: [testRecommendationId], references: [id], onDelete: Cascade)
+}
+
+
+model LabTestTemplate {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(255)
+  description String? @db.Text
+  version String @db.VarChar(50)
+  formStructure Json @map("form_structure")
+  isActive Boolean @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@unique([name, version])
+  @@map("lab_test_templates")
+
+  // Relations
+  labTests LabTest[]
+}
+
+enum PatientLabTestStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model PatientLabTest {
+  id Int @id @default(autoincrement())
+  patientId Int @map("patient_id")
+  labTestId Int @map("lab_test_id")
+  result String? @db.Text
+  performedAt DateTime? @map("performed_at")
+  status PatientLabTestStatus @default(PENDING)
+
+  labTechnicianAssigned Int? @map("lab_technician_assigned")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  labTest LabTest @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  labTechnician LabTechnician? @relation(fields: [labTechnicianAssigned], references: [id], onDelete: SetNull)
+
+  @@map("patient_lab_tests")
+}

@@ -121,7 +121,7 @@ def run_spark_etl(start, end, single_file=False, coalesce_num=1):
             .getOrCreate()
         logger.info("Spark session created.")
 
-        where_clause = f"created_at > timestamp '{start}' and created_at < timestamp '{end}'"
+        where_clause = f"checkup_created_at > timestamp '{start}' and checkup_created_at < timestamp '{end}'"
 
         df = spark.read \
             .format("jdbc") \

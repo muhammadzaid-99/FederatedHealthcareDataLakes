@@ -77,6 +77,8 @@ func (r *Router) Setup() *gin.Engine {
 			auth.POST("/admin/logout", r.authHandler.AdminLogout)
 			auth.POST("/hospital/login", r.authHandler.HospitalLogin)
 			auth.POST("/hospital/logout", r.authHandler.HospitalLogout)
+			auth.POST("/requestor/login", r.authHandler.RequestorLogin)
+			auth.POST("/requestor/logout", r.authHandler.RequestorLogout)
 
 			// Node authentication (returns JWT token for Authorization header)
 			auth.POST("/node/token", r.authHandler.ClientCredentialsAuth)
@@ -84,6 +86,9 @@ func (r *Router) Setup() *gin.Engine {
 
 		// Hospital registration (public endpoint)
 		v1.POST("/hospitals/register", r.hospitalHandler.RegisterHospital)
+
+		// Requestor registration (public endpoint)
+		v1.POST("/requestors/register", r.authHandler.RequestorRegister)
 
 		// ============================================================
 		// ADMIN ENDPOINTS (Cookie-based Auth - Admin Only)
@@ -153,6 +158,25 @@ func (r *Router) Setup() *gin.Engine {
 			{
 				nodeRequestAuth.POST("/:id/responses", r.requestHandler.SubmitResponse)
 			}
+		}
+
+		// ============================================================
+		// REQUESTOR ENDPOINTS (Cookie-based Auth - Requestor Only)
+		// For researchers to manage their data access requests
+		// ============================================================
+		requestor := v1.Group("/requestor")
+		requestor.Use(middleware.AuthMiddleware(r.authService), middleware.RequestorOnly())
+		{
+			// Requestor's own profile
+			requestor.GET("/me", r.requestHandler.GetRequestorProfile)
+
+			// Requestor's data access requests
+			requestor.GET("/requests", r.requestHandler.GetRequestorRequests)
+			requestor.POST("/requests", r.requestHandler.CreateRequestorRequest)
+			requestor.GET("/requests/:id", r.requestHandler.GetRequestorRequestByID)
+
+			// Get active hospitals for request form
+			requestor.GET("/hospitals", r.requestHandler.GetActiveHospitals)
 		}
 	}
 

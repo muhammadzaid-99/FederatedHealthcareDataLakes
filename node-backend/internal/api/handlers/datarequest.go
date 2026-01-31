@@ -62,11 +62,12 @@ func (h *DataRequestHandler) ApproveRequest(c *gin.Context) {
 	}
 
 	var input struct {
-		ApprovedBy      string `json:"approved_by" binding:"required"`
-		DateRangeStart  string `json:"date_range_start" binding:"required"` // YYYY-MM-DD
-		DateRangeEnd    string `json:"date_range_end" binding:"required"`   // YYYY-MM-DD
-		DurationSeconds int32  `json:"duration_seconds"`                    // Optional, defaults to 3600
-		Notes           string `json:"notes"`
+		ApprovedBy      string   `json:"approved_by" binding:"required"`
+		Departments     []string `json:"departments" binding:"required"`      // Departments to grant access to
+		DateRangeStart  string   `json:"date_range_start" binding:"required"` // YYYY-MM-DD
+		DateRangeEnd    string   `json:"date_range_end" binding:"required"`   // YYYY-MM-DD
+		DurationSeconds int32    `json:"duration_seconds"`                    // Optional, defaults to 3600
+		Notes           string   `json:"notes"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -77,6 +78,7 @@ func (h *DataRequestHandler) ApproveRequest(c *gin.Context) {
 	approvalInput := services.ApprovalInput{
 		RequestID:       id,
 		ApprovedBy:      input.ApprovedBy,
+		Departments:     input.Departments,
 		DateRangeStart:  input.DateRangeStart,
 		DateRangeEnd:    input.DateRangeEnd,
 		DurationSeconds: input.DurationSeconds,

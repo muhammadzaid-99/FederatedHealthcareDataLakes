@@ -448,7 +448,7 @@ func (s *ETLService) runExtraction(config *models.ETLConfig, start, end string) 
 
 // runNormalization executes the normalization script
 func (s *ETLService) runNormalization(config *models.ETLConfig, stagingPath string) (string, error) {
-	scriptPath := filepath.Join(config.ScriptsPath, "fhir_transform.py")
+	scriptPath := filepath.Join(config.ScriptsPath, "fhir_transform_2.py")
 
 	// Generate normalized path
 	normalizedPath := filepath.Join(filepath.Dir(filepath.Dir(stagingPath)), "normalized", filepath.Base(stagingPath))
@@ -479,7 +479,7 @@ func (s *ETLService) runNormalization(config *models.ETLConfig, stagingPath stri
 
 // runValidationAndPublish executes the validation and publish script
 func (s *ETLService) runValidationAndPublish(config *models.ETLConfig, start, end, normalizedPath string) (string, int, int, error) {
-	scriptPath := filepath.Join(config.ScriptsPath, "validate_publish.py")
+	scriptPath := filepath.Join(config.ScriptsPath, "validate_publish_2.py")
 
 	// Generate validated path
 	validatedPath := filepath.Join(filepath.Dir(filepath.Dir(normalizedPath)), "validated", filepath.Base(normalizedPath))

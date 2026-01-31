@@ -81,9 +81,10 @@ func (s *DataRequestService) CreateRequest(messageID uuid.UUID, requestorID, req
 type ApprovalInput struct {
 	RequestID       uuid.UUID
 	ApprovedBy      string
-	DateRangeStart  string // YYYY-MM-DD
-	DateRangeEnd    string // YYYY-MM-DD
-	DurationSeconds int32  // Credential validity duration
+	Departments     []string // Departments to grant access to
+	DateRangeStart  string   // YYYY-MM-DD
+	DateRangeEnd    string   // YYYY-MM-DD
+	DurationSeconds int32    // Credential validity duration
 	Notes           string
 }
 
@@ -150,6 +151,7 @@ func (s *DataRequestService) ApproveRequest(input ApprovalInput) (*models.DataRe
 		bucket,
 		namespace,
 		tablePattern,
+		input.Departments,
 		optimizedDates,
 		input.DurationSeconds,
 	)
@@ -168,6 +170,7 @@ func (s *DataRequestService) ApproveRequest(input ApprovalInput) (*models.DataRe
 	request.Status = "approved"
 	request.ApprovedAt = &now
 	request.ApprovedBy = input.ApprovedBy
+	request.Departments = input.Departments
 	request.DateRangeStart = input.DateRangeStart
 	request.DateRangeEnd = input.DateRangeEnd
 	request.PolicyJSON = policyJSON

@@ -123,18 +123,19 @@ func GenerateRestrictedKeys(
 }
 
 // GenerateRestrictedKeysForIceberg is a convenience function that generates temporary credentials
-// for Iceberg table access with date-based partitions
+// for Iceberg table access with department and date-based partitions
 func GenerateRestrictedKeysForIceberg(
 	ctx context.Context,
 	stsClient *sts.Client,
 	bucket string,
 	namespace string,
 	tablePattern string,
+	departments []string,
 	dates []string,
 	durationSeconds int32,
 ) (*TemporaryCredentials, string, error) {
 	// Build the policy
-	policyDoc, err := BuildIcebergAccessPolicy(bucket, namespace, tablePattern, dates)
+	policyDoc, err := BuildIcebergAccessPolicy(bucket, namespace, tablePattern, departments, dates)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build policy: %w", err)
 	}

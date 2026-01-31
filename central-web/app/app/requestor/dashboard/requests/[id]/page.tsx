@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { api, DataAccessRequest, NodeAccessResponse } from '@/lib/api'
+import { requestorApi, DataAccessRequest, NodeAccessResponse } from '@/lib/requestor_api'
 import { formatDate, getStatusColor } from '@/lib/utils'
 import { 
   ArrowLeft, 
@@ -22,10 +22,11 @@ import {
   Calendar,
   Copy,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Terminal
 } from 'lucide-react'
 
-export default function RequestDetailsPage() {
+export default function RequestorRequestDetailsPage() {
   const params = useParams()
   const router = useRouter()
   const requestId = params.id as string
@@ -46,7 +47,7 @@ export default function RequestDetailsPage() {
     try {
       setLoading(true)
       setError('')
-      const data = await api.getRequestById(requestId)
+      const data = await requestorApi.getRequestById(requestId)
       setRequest(data)
     } catch (err: any) {
       setError(err.message)
@@ -134,6 +135,10 @@ export default function RequestDetailsPage() {
     )
   }
 
+  const hasActiveCredentials = request.responses?.some(
+    r => r.status === 'APPROVED' && r.access_key_id
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -148,10 +153,21 @@ export default function RequestDetailsPage() {
             <p className="text-sm text-muted-foreground">ID: {request.id}</p>
           </div>
         </div>
-        <Button variant="outline" onClick={loadRequest} className="gap-2">
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          {hasActiveCredentials && (
+            <Button 
+              onClick={() => router.push('/requestor/dashboard/query')}
+              className="gap-2"
+            >
+              <Terminal className="w-4 h-4" />
+              Query Data
+            </Button>
+          )}
+          <Button variant="outline" onClick={loadRequest} className="gap-2">
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Request Overview */}
@@ -159,16 +175,11 @@ export default function RequestDetailsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Request Overview</CardTitle>
-            <Badge className={getStatusColor(request.status)}>{request.status}</Badge>
+            <Badge className={getStatusColor(request.status)}>{request.status.replace('_', ' ')}</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Requestor</p>
-              <p className="text-sm">{request.requestor_id}</p>
-              <p className="text-sm text-muted-foreground">{request.requestor_email}</p>
-            </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">Purpose</p>
               <p className="text-sm">{request.purpose}</p>
@@ -181,32 +192,24 @@ export default function RequestDetailsPage() {
               <p className="text-sm font-medium text-muted-foreground">Expires</p>
               <p className="text-sm">{formatDate(request.expires_at)}</p>
             </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Hospitals</p>
+              <p className="text-sm">{request.requested_nodes?.length || 0} requested</p>
+            </div>
           </div>
 
           <Separator />
 
           <div>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Target Hospitals ({request.requested_nodes?.length || 0})</p>
+            <p className="text-sm font-medium text-muted-foreground mb-2">Requested Departments</p>
             <div className="flex flex-wrap gap-2">
-              {request.requested_nodes?.map((nodeId) => (
-                <Badge key={nodeId} variant="outline">
-                  {nodeId}
+              {request.departments?.map((dept) => (
+                <Badge key={dept} variant="secondary">
+                  {dept}
                 </Badge>
               ))}
             </div>
           </div>
-
-          {request.data_query && (
-            <>
-              <Separator />
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Data Query</p>
-                <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-32">
-                  {JSON.stringify(request.data_query, null, 2)}
-                </pre>
-              </div>
-            </>
-          )}
         </CardContent>
       </Card>
 
@@ -246,7 +249,7 @@ export default function RequestDetailsPage() {
                           {response.hospital?.name || `Hospital ${response.hospital_id.substring(0, 8)}...`}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {response.hospital?.email || response.hospital_id}
+                          {response.hospital?.admin_email || response.hospital_id}
                         </p>
                       </div>
                     </div>
@@ -286,11 +289,17 @@ export default function RequestDetailsPage() {
                         </div>
                       )}
 
-                      {/* Notes */}
-                      {response.departments && (
+                      {/* Departments */}
+                      {response.departments && response.departments.length > 0 && (
                         <div className="p-3 bg-muted rounded-lg">
-                          <p className="text-sm font-medium mb-1">Departments</p>
-                          <p className="text-sm text-muted-foreground">{response.departments.join(', ')}</p>
+                          <p className="text-sm font-medium mb-1">Approved Departments</p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {response.departments.map((dept) => (
+                              <Badge key={dept} variant="secondary" className="text-xs">
+                                {dept}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
                       )}
 

@@ -202,3 +202,111 @@ func (h *AuthHandler) ClientCredentialsAuth(c *gin.Context) {
 		},
 	})
 }
+
+// RequestorRegister handles requestor registration
+func (h *AuthHandler) RequestorRegister(c *gin.Context) {
+	var req struct {
+		Name         string `json:"name" binding:"required"`
+		Email        string `json:"email" binding:"required,email"`
+		Password     string `json:"password" binding:"required,min=6"`
+		Organization string `json:"organization"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Register requestor with pending status
+	requestor, err := h.authService.RegisterRequestor(req.Name, req.Email, req.Password, req.Organization)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Registration successful. Please wait for admin approval.",
+		"requestor": gin.H{
+			"id":           requestor.ID,
+			"name":         requestor.Name,
+			"email":        requestor.Email,
+			"organization": requestor.Organization,
+			"status":       requestor.Status,
+		},
+	})
+}
+
+// RequestorLogin handles requestor authentication
+// Uses secure httpOnly cookies for central-web
+func (h *AuthHandler) RequestorLogin(c *gin.Context) {
+	var req struct {
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Authenticate requestor
+	requestor, err := h.authService.AuthenticateRequestor(req.Email, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Generate JWT
+	token, err := h.authService.GenerateJWT(requestor.ID.String(), "requestor", requestor.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	// Clear any other token cookies first
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("admin_token", "", -1, "/", "", false, true)
+	c.SetCookie("hospital_token", "", -1, "/", "", false, true)
+
+	// Set requestor token in httpOnly cookie
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"requestor_token", // name
+		token,             // value
+		3600*24*7,         // maxAge (7 days in seconds)
+		"/",               // path
+		"",                // domain
+		false,             // secure (set true in production with HTTPS)
+		true,              // httpOnly
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Login successful",
+		"requestor": gin.H{
+			"id":           requestor.ID,
+			"name":         requestor.Name,
+			"email":        requestor.Email,
+			"organization": requestor.Organization,
+			"status":       requestor.Status,
+		},
+	})
+}
+
+// RequestorLogout handles requestor logout
+func (h *AuthHandler) RequestorLogout(c *gin.Context) {
+	// Clear the cookie
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"requestor_token",
+		"",
+		-1, // maxAge -1 deletes the cookie
+		"/",
+		"",
+		false,
+		true,
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Logout successful",
+	})
+}
