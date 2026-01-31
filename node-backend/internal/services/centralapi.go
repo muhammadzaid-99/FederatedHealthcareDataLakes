@@ -27,16 +27,17 @@ func NewCentralAPIService(cfg *config.Config, tokenService *TokenService) *Centr
 
 // SubmitResponsePayload is the payload sent to central-backend when responding to a data request
 type SubmitResponsePayload struct {
-	Status          string `json:"status"` // APPROVED or REJECTED
-	Notes           string `json:"notes,omitempty"`
-	ValidHours      int    `json:"valid_hours,omitempty"`
-	AccessKeyID     string `json:"access_key_id,omitempty"`
-	SecretAccessKey string `json:"secret_access_key,omitempty"`
-	SessionToken    string `json:"session_token,omitempty"`
-	CredExpiration  string `json:"cred_expiration,omitempty"` // ISO8601
-	DateRangeStart  string `json:"date_range_start,omitempty"`
-	DateRangeEnd    string `json:"date_range_end,omitempty"`
-	PolicyJSON      string `json:"policy_json,omitempty"`
+	Status          string   `json:"status"` // APPROVED or REJECTED
+	Notes           string   `json:"notes,omitempty"`
+	ValidHours      int      `json:"valid_hours,omitempty"`
+	AccessKeyID     string   `json:"access_key_id,omitempty"`
+	SecretAccessKey string   `json:"secret_access_key,omitempty"`
+	SessionToken    string   `json:"session_token,omitempty"`
+	CredExpiration  string   `json:"cred_expiration,omitempty"` // ISO8601
+	Departments     []string `json:"departments,omitempty"`
+	DateRangeStart  string   `json:"date_range_start,omitempty"`
+	DateRangeEnd    string   `json:"date_range_end,omitempty"`
+	PolicyJSON      string   `json:"policy_json,omitempty"`
 }
 
 // SubmitDataRequestResponse sends the approval/rejection response to central-backend
@@ -65,6 +66,7 @@ func (s *CentralAPIService) SubmitDataRequestResponse(request *models.DataReques
 
 	if request.Status == "approved" {
 		submitPayload.Status = "APPROVED"
+		submitPayload.Departments = request.Departments
 		submitPayload.DateRangeStart = request.DateRangeStart
 		submitPayload.DateRangeEnd = request.DateRangeEnd
 		submitPayload.PolicyJSON = request.PolicyJSON

@@ -223,6 +223,7 @@ export const api = {
     id: string, 
     data: {
       approved_by: string;
+      departments: string[];
       date_range_start: string;
       date_range_end: string;
       duration_seconds?: number;

@@ -33,10 +33,13 @@ func AuthMiddleware(authService *services.AuthService) gin.HandlerFunc {
 			// Check which cookies are present
 			adminToken, adminErr := c.Cookie("admin_token")
 			hospitalToken, hospitalErr := c.Cookie("hospital_token")
+			requestorToken, requestorErr := c.Cookie("requestor_token")
 
 			// Prefer the cookie that matches the route being accessed
-			// If both exist, use the one that's newer or matches the expected user type
-			if hospitalErr == nil && hospitalToken != "" {
+			if requestorErr == nil && requestorToken != "" {
+				token = requestorToken
+				authSource = "requestor_cookie"
+			} else if hospitalErr == nil && hospitalToken != "" {
 				token = hospitalToken
 				authSource = "hospital_cookie"
 			} else if adminErr == nil && adminToken != "" {
@@ -106,6 +109,19 @@ func NodeOnly() gin.HandlerFunc {
 		userType, exists := c.Get("user_type")
 		if !exists || userType != "node" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "node access required"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequestorOnly middleware ensures only requestors can access the endpoint
+func RequestorOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userType, exists := c.Get("user_type")
+		if !exists || userType != "requestor" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "requestor access required"})
 			c.Abort()
 			return
 		}

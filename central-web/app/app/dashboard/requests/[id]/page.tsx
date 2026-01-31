@@ -286,6 +286,14 @@ export default function RequestDetailsPage() {
                         </div>
                       )}
 
+                      {/* Notes */}
+                      {response.departments && (
+                        <div className="p-3 bg-muted rounded-lg">
+                          <p className="text-sm font-medium mb-1">Departments</p>
+                          <p className="text-sm text-muted-foreground">{response.departments.join(', ')}</p>
+                        </div>
+                      )}
+
                       {/* Credentials Section */}
                       {response.access_key_id && (
                         <div className="space-y-3">

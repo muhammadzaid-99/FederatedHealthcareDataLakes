@@ -184,6 +184,9 @@ type DataRequest struct {
 	ApprovedBy string     `json:"approved_by,omitempty"` // Username who approved/rejected
 	RejectedBy string     `json:"rejected_by,omitempty"`
 
+	// Department Access
+	Departments []string `gorm:"serializer:json" json:"departments"` // Departments to grant access to
+
 	// Date Range for Data Access
 	DateRangeStart string `json:"date_range_start,omitempty"` // YYYY-MM-DD format
 	DateRangeEnd   string `json:"date_range_end,omitempty"`   // YYYY-MM-DD format or pattern like "2025-11-*"

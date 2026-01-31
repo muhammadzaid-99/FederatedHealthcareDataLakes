@@ -79,6 +79,10 @@ export default function RequestsPage() {
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [rejecting, setRejecting] = useState(false);
 
+  // Department selection state
+  const DEPARTMENTS = ['Cardiology', 'Gynecology', 'Neurology', 'Orthopedics', 'Pediatrics'];
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+
   // Credentials modal state
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
   const [viewingRequest, setViewingRequest] = useState<DataRequest | null>(null);
@@ -122,6 +126,7 @@ export default function RequestsPage() {
       const user = storage.getUserInfo();
       await api.approveDataRequest(token, selectedRequest.id, {
         approved_by: user?.username || 'admin',
+        departments: selectedDepartments,
         date_range_start: format(dateRange.from, 'yyyy-MM-dd'),
         date_range_end: format(dateRange.to, 'yyyy-MM-dd'),
         duration_seconds: credentialExpirySeconds,
@@ -130,6 +135,7 @@ export default function RequestsPage() {
       setApproveModalOpen(false);
       setSelectedRequest(null);
       setDateRange(undefined);
+      setSelectedDepartments([]);
       setCredentialExpirySeconds(3600);
       setApprovalNotes('');
       fetchRequests();
@@ -168,6 +174,7 @@ export default function RequestsPage() {
   const openApproveModal = (request: DataRequest) => {
     setSelectedRequest(request);
     setDateRange(undefined);
+    setSelectedDepartments([]);
     setCredentialExpirySeconds(3600);
     setApprovalNotes('');
     setApproveModalOpen(true);
@@ -380,6 +387,56 @@ export default function RequestsPage() {
                 <div className="flex justify-center">
                   <DateRangePicker value={dateRange} onChange={setDateRange} />
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">
+                  Departments to Grant Access
+                </label>
+                <div className="p-3 border border-gray-300 rounded-md">
+                  <div className="flex items-center mb-2 pb-2 border-b border-gray-200">
+                    <input
+                      type="checkbox"
+                      id="select-all-depts"
+                      className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      checked={selectedDepartments.length === DEPARTMENTS.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedDepartments([...DEPARTMENTS]);
+                        } else {
+                          setSelectedDepartments([]);
+                        }
+                      }}
+                    />
+                    <label htmlFor="select-all-depts" className="ml-2 text-sm font-medium text-gray-700">
+                      Select All
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {DEPARTMENTS.map((dept) => (
+                      <div key={dept} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`dept-${dept}`}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          checked={selectedDepartments.includes(dept)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedDepartments([...selectedDepartments, dept]);
+                            } else {
+                              setSelectedDepartments(selectedDepartments.filter((d) => d !== dept));
+                            }
+                          }}
+                        />
+                        <label htmlFor={`dept-${dept}`} className="ml-2 text-sm text-gray-700">
+                          {dept}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Selected: {selectedDepartments.length === 0 ? 'None (no access will be granted)' : selectedDepartments.join(', ')}
+                </p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-2">

@@ -87,6 +87,7 @@ func RunMigrations() error {
 	// Auto migrate all models
 	if err := DB.AutoMigrate(
 		&models.Hospital{},
+		&models.Requestor{},
 		&models.DataAccessRequest{},
 		&models.NodeAccessResponse{},
 		&models.AuditLog{},

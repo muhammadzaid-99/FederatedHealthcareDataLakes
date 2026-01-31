@@ -52,6 +52,9 @@ type NodeAccessResponse struct {
 	SessionToken    string     `gorm:"type:text" json:"session_token,omitempty"`
 	CredExpiration  *time.Time `json:"cred_expiration,omitempty"`
 
+	// Departments approved for access
+	Departments []string `gorm:"serializer:json" json:"departments,omitempty"`
+
 	// Date range approved for access
 	DateRangeStart string `gorm:"type:varchar(50)" json:"date_range_start,omitempty"`
 	DateRangeEnd   string `gorm:"type:varchar(50)" json:"date_range_end,omitempty"`

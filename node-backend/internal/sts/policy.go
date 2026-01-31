@@ -40,19 +40,16 @@ func (p *PolicyDocument) ToJSONPretty() (string, error) {
 	return string(bytes), nil
 }
 
-// BuildIcebergAccessPolicy creates a policy for accessing Iceberg tables with date-based partitions
+// BuildIcebergAccessPolicy creates a policy for accessing Iceberg tables with department and date-based partitions
 // Parameters:
 //   - bucket: S3 bucket name (e.g., "hospital-data")
 //   - namespace: Nessie namespace (e.g., "hospital_xyz123")
 //   - tablePattern: Table name pattern (e.g., "checkups_*" to match all checkup tables)
+//   - departments: List of department names (e.g., ["Cardiology", "Neurology"])
 //   - dates: List of dates or date patterns (e.g., ["2025-11-23", "2025-11-*", "2025-*"])
-func BuildIcebergAccessPolicy(bucket, namespace, tablePattern string, dates []string) (*PolicyDocument, error) {
+func BuildIcebergAccessPolicy(bucket, namespace, tablePattern string, departments, dates []string) (*PolicyDocument, error) {
 	if bucket == "" || namespace == "" || tablePattern == "" {
 		return nil, fmt.Errorf("bucket, namespace, and tablePattern are required")
-	}
-
-	if len(dates) == 0 {
-		return nil, fmt.Errorf("at least one date or date pattern is required")
 	}
 
 	policy := &PolicyDocument{
@@ -86,12 +83,15 @@ func BuildIcebergAccessPolicy(bucket, namespace, tablePattern string, dates []st
 	}
 	policy.Statement = append(policy.Statement, metadataGetStatement)
 
-	// Statement 3: Allow data access for specific partitions
-	dataResources := make([]string, 0, len(dates))
-	for _, date := range dates {
-		resource := fmt.Sprintf("arn:aws:s3:::%s/iceberg/%s/%s/data/ingest_date=%s/*",
-			bucket, namespace, tablePattern, date)
-		dataResources = append(dataResources, resource)
+	// Statement 3: Allow data access for specific department/date partition combinations
+	// Path pattern: iceberg/{namespace}/{table}/data/department_name={dept}/checkup_date={date}/*
+	dataResources := make([]string, 0, len(departments)*len(dates))
+	for _, dept := range departments {
+		for _, date := range dates {
+			resource := fmt.Sprintf("arn:aws:s3:::%s/iceberg/%s/%s/data/department_name=%s/checkup_date=%s/*",
+				bucket, namespace, tablePattern, dept, date)
+			dataResources = append(dataResources, resource)
+		}
 	}
 
 	dataStatement := Statement{
