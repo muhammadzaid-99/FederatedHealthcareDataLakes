@@ -24,6 +24,9 @@ type Config struct {
 
 	// Cache settings
 	Cache CacheConfig
+
+	// Internal API key for authenticating requests from central-backend
+	InternalAPIKey string
 }
 
 // DatabaseConfig holds database connection settings
@@ -76,6 +79,8 @@ func Load() (*Config, error) {
 			CredentialTTLSeconds: getEnvAsInt("CACHE_CREDENTIAL_TTL", 300), // 5 minutes default
 			HospitalTTLSeconds:   getEnvAsInt("CACHE_HOSPITAL_TTL", 600),   // 10 minutes default
 		},
+
+		InternalAPIKey: getEnv("INTERNAL_API_KEY", ""),
 	}
 
 	return cfg, cfg.Validate()

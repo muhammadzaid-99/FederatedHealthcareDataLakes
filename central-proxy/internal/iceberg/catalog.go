@@ -17,6 +17,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// NamespaceSeparator is used to encode the access_key_id into the namespace
+// so Trino (which cannot send custom headers) carries the credential identity.
+// Format: "hospital_<uuid>::<access_key_id>"
+const NamespaceSeparator = "::"
+
 // IcebergCatalog implements the Iceberg REST Catalog API
 // using Nessie's Core API (/api/v2) as the backend
 type IcebergCatalog struct {
@@ -113,25 +118,28 @@ func NewIcebergCatalog(nessieEndpoint string, credService *services.CredentialSe
 
 // RegisterRoutes registers all Iceberg REST API routes
 func (c *IcebergCatalog) RegisterRoutes(router *gin.RouterGroup) {
-	// Config endpoint
 	router.GET("/v1/config", c.GetConfig)
-
-	// Namespace endpoints
 	router.GET("/v1/namespaces", c.ListNamespaces)
 	router.GET("/v1/:prefix/namespaces", c.ListNamespaces)
 	router.GET("/v1/namespaces/:namespace", c.GetNamespace)
 	router.GET("/v1/:prefix/namespaces/:namespace", c.GetNamespace)
-
-	// Table endpoints
 	router.GET("/v1/namespaces/:namespace/tables", c.ListTables)
 	router.GET("/v1/:prefix/namespaces/:namespace/tables", c.ListTables)
 	router.GET("/v1/namespaces/:namespace/tables/:table", c.LoadTable)
 	router.GET("/v1/:prefix/namespaces/:namespace/tables/:table", c.LoadTable)
 }
 
+// parseNamespaceAccessKey splits a namespace that may contain "::access_key_id"
+// Returns (realNamespace, accessKeyID). If no separator found, accessKeyID is empty.
+func parseNamespaceAccessKey(namespace string) (string, string) {
+	idx := strings.Index(namespace, NamespaceSeparator)
+	if idx == -1 {
+		return namespace, ""
+	}
+	return namespace[:idx], namespace[idx+len(NamespaceSeparator):]
+}
+
 // GetConfig returns the Iceberg REST catalog configuration
-// NOTE: We do NOT set a "prefix" here. Nessie's "main" branch is an internal concept.
-// The proxy handles the "main" branch when talking to Nessie, Trino shouldn't know about it.
 func (c *IcebergCatalog) GetConfig(ctx *gin.Context) {
 	config := IcebergConfigResponse{
 		Defaults:  map[string]string{},
@@ -142,12 +150,14 @@ func (c *IcebergCatalog) GetConfig(ctx *gin.Context) {
 
 // ListNamespaces returns all namespaces from Nessie
 func (c *IcebergCatalog) ListNamespaces(ctx *gin.Context) {
-	// Log the full request for debugging
 	parent := ctx.Query("parent")
 	pageToken := ctx.Query("pageToken")
 	pageSize := ctx.Query("pageSize")
 	logrus.Infof("ListNamespaces called: parent=%q, pageToken=%q, pageSize=%q, headers=%v",
 		parent, pageToken, pageSize, ctx.Request.Header)
+
+	// If parent contains ::, strip the access_key_id part for Nessie lookup
+	realParent, _ := parseNamespaceAccessKey(parent)
 
 	entries, err := c.fetchNessieEntries("main")
 	if err != nil {
@@ -164,19 +174,14 @@ func (c *IcebergCatalog) ListNamespaces(ctx *gin.Context) {
 
 	var namespaces [][]string
 
-	// If parent is specified, we should list child namespaces under that parent
-	// If parent is empty, we list root namespaces
-	if parent == "" {
-		// List root namespaces (single-level)
+	if realParent == "" {
 		for _, entry := range entries {
 			if entry.Type == "NAMESPACE" && len(entry.Name.Elements) == 1 {
 				namespaces = append(namespaces, entry.Name.Elements)
 			}
 		}
 	} else {
-		// List child namespaces under the parent
-		// For now, we don't have hierarchical namespaces, so return empty
-		logrus.Infof("ListNamespaces with parent=%q - returning empty (no hierarchical namespaces)", parent)
+		logrus.Infof("ListNamespaces with parent=%q - returning empty", realParent)
 		namespaces = [][]string{}
 	}
 
@@ -188,7 +193,8 @@ func (c *IcebergCatalog) ListNamespaces(ctx *gin.Context) {
 
 // GetNamespace returns details of a specific namespace
 func (c *IcebergCatalog) GetNamespace(ctx *gin.Context) {
-	namespace := ctx.Param("namespace")
+	rawNamespace := ctx.Param("namespace")
+	namespace, _ := parseNamespaceAccessKey(rawNamespace)
 
 	entries, err := c.fetchNessieEntries("main")
 	if err != nil {
@@ -223,7 +229,8 @@ func (c *IcebergCatalog) GetNamespace(ctx *gin.Context) {
 
 // ListTables returns all tables in a namespace
 func (c *IcebergCatalog) ListTables(ctx *gin.Context) {
-	namespace := ctx.Param("namespace")
+	rawNamespace := ctx.Param("namespace")
+	namespace, _ := parseNamespaceAccessKey(rawNamespace)
 
 	entries, err := c.fetchNessieEntries("main")
 	if err != nil {
@@ -252,15 +259,17 @@ func (c *IcebergCatalog) ListTables(ctx *gin.Context) {
 	})
 }
 
-// LoadTable returns table metadata with injected credentials
-// This is the key "Hybrid Pointer" implementation
+// LoadTable returns table metadata with injected credentials.
+// The namespace may contain "::access_key_id" to identify which specific
+// STS credentials to use (preventing cross-requestor credential leakage).
 func (c *IcebergCatalog) LoadTable(ctx *gin.Context) {
-	namespace := ctx.Param("namespace")
+	rawNamespace := ctx.Param("namespace")
 	table := ctx.Param("table")
 
-	logrus.Infof("LoadTable request: namespace=%s, table=%s", namespace, table)
+	namespace, accessKeyID := parseNamespaceAccessKey(rawNamespace)
 
-	// Step 1: Fetch the table entry from Nessie /api/v2
+	logrus.Infof("LoadTable request: namespace=%s, table=%s, access_key_id=%s", namespace, table, accessKeyID)
+
 	entries, err := c.fetchNessieEntries("main")
 	if err != nil {
 		logrus.Errorf("Failed to fetch Nessie entries: %v", err)
@@ -274,7 +283,6 @@ func (c *IcebergCatalog) LoadTable(ctx *gin.Context) {
 		return
 	}
 
-	// Find the table
 	var tableEntry *NessieEntry
 	for _, entry := range entries {
 		if entry.Type == "ICEBERG_TABLE" &&
@@ -311,21 +319,36 @@ func (c *IcebergCatalog) LoadTable(ctx *gin.Context) {
 
 	logrus.Infof("Found table metadata location: %s", metadataLocation)
 
-	// Step 2: Look up STS credentials for this namespace
-	creds, err := c.credService.GetCredentialsByNamespace(namespace)
-	if err != nil {
-		logrus.Warnf("Could not fetch credentials for namespace %s: %v", namespace, err)
-		ctx.JSON(http.StatusInternalServerError, IcebergErrorResponse{
-			Error: IcebergError{
-				Message: fmt.Sprintf("Failed to get credentials for namespace: %v", err),
-				Type:    "InternalServerError",
-				Code:    500,
-			},
-		})
-		return
+	// Step 2: Look up STS credentials
+	var creds *models.STSCredentials
+	if accessKeyID != "" {
+		creds, err = c.credService.GetCredentialsByNamespaceAndAccessKey(namespace, accessKeyID)
+		if err != nil {
+			logrus.Warnf("Could not fetch credentials for namespace %s with access_key_id %s: %v", namespace, accessKeyID, err)
+			ctx.JSON(http.StatusForbidden, IcebergErrorResponse{
+				Error: IcebergError{
+					Message: fmt.Sprintf("Access denied: invalid credentials for namespace %s", namespace),
+					Type:    "ForbiddenException",
+					Code:    403,
+				},
+			})
+			return
+		}
+	} else {
+		creds, err = c.credService.GetCredentialsByNamespace(namespace)
+		if err != nil {
+			logrus.Warnf("Could not fetch credentials for namespace %s: %v", namespace, err)
+			ctx.JSON(http.StatusInternalServerError, IcebergErrorResponse{
+				Error: IcebergError{
+					Message: fmt.Sprintf("Failed to get credentials for namespace: %v", err),
+					Type:    "InternalServerError",
+					Code:    500,
+				},
+			})
+			return
+		}
 	}
 
-	// Step 3: Fetch the actual metadata.json from the hospital's MinIO
 	metadata, err := c.fetchTableMetadata(metadataLocation, creds)
 	if err != nil {
 		logrus.Errorf("Failed to fetch table metadata from %s: %v", metadataLocation, err)
@@ -339,8 +362,6 @@ func (c *IcebergCatalog) LoadTable(ctx *gin.Context) {
 		return
 	}
 
-	// Step 4: Build the response with credentials
-	// Transform s3a:// to s3:// and point to our proxy
 	proxyMetadataLocation := c.transformMetadataLocation(metadataLocation)
 
 	config := map[string]string{
@@ -355,7 +376,7 @@ func (c *IcebergCatalog) LoadTable(ctx *gin.Context) {
 		config["s3.session-token"] = creds.SessionToken
 	}
 
-	logrus.Infof("Returning LoadTable response with metadata and credentials for namespace %s", namespace)
+	logrus.Infof("Returning LoadTable response with credentials for namespace %s (access_key_id: %s)", namespace, accessKeyID)
 
 	ctx.JSON(http.StatusOK, IcebergLoadTableResponse{
 		MetadataLocation: proxyMetadataLocation,
@@ -364,19 +385,14 @@ func (c *IcebergCatalog) LoadTable(ctx *gin.Context) {
 	})
 }
 
-// transformMetadataLocation converts s3a://bucket/path to s3://bucket/path
-// and can optionally rewrite to point to our proxy
 func (c *IcebergCatalog) transformMetadataLocation(location string) string {
-	// Convert s3a:// to s3://
 	if strings.HasPrefix(location, "s3a://") {
 		return "s3://" + strings.TrimPrefix(location, "s3a://")
 	}
 	return location
 }
 
-// fetchTableMetadata fetches the table metadata JSON from the hospital's MinIO
 func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *models.STSCredentials) (map[string]interface{}, error) {
-	// Parse the S3 URL (s3://bucket/key or s3a://bucket/key)
 	bucket, key, err := parseS3URL(metadataLocation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse metadata location: %w", err)
@@ -384,7 +400,6 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 
 	logrus.Infof("Fetching metadata from bucket=%s, key=%s, endpoint=%s", bucket, key, creds.MinIOEndpoint)
 
-	// Create S3 client with the hospital's credentials
 	s3Client := s3.New(s3.Options{
 		Region:       "us-east-1",
 		BaseEndpoint: aws.String(creds.MinIOEndpoint),
@@ -396,7 +411,6 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 		UsePathStyle: true,
 	})
 
-	// Fetch the object
 	result, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -406,7 +420,6 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 	}
 	defer result.Body.Close()
 
-	// Read and parse the JSON
 	body, err := io.ReadAll(result.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata body: %w", err)
@@ -421,9 +434,7 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 	return metadata, nil
 }
 
-// parseS3URL parses an S3 URL (s3://bucket/key or s3a://bucket/key) and returns bucket and key
 func parseS3URL(url string) (bucket, key string, err error) {
-	// Remove s3:// or s3a:// prefix
 	path := url
 	if strings.HasPrefix(url, "s3a://") {
 		path = strings.TrimPrefix(url, "s3a://")
@@ -433,7 +444,6 @@ func parseS3URL(url string) (bucket, key string, err error) {
 		return "", "", fmt.Errorf("invalid S3 URL: %s", url)
 	}
 
-	// Split into bucket and key
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("invalid S3 path: %s", path)
@@ -442,7 +452,6 @@ func parseS3URL(url string) (bucket, key string, err error) {
 	return parts[0], parts[1], nil
 }
 
-// fetchNessieEntries calls Nessie /api/v2/trees/{ref}/entries with content=true
 func (c *IcebergCatalog) fetchNessieEntries(ref string) ([]NessieEntry, error) {
 	url := fmt.Sprintf("%s/api/v2/trees/%s/entries?content=true", c.nessieEndpoint, ref)
 

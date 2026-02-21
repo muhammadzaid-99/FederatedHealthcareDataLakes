@@ -33,8 +33,67 @@ func NewCredentialService(db *gorm.DB, cfg *config.CacheConfig) *CredentialServi
 	}
 }
 
+// GetCredentialsByNamespaceAndAccessKey fetches STS credentials for a namespace
+// using a specific access_key_id to ensure only the rightful requestor's credentials are used.
+func (s *CredentialService) GetCredentialsByNamespaceAndAccessKey(namespace string, accessKeyID string) (*models.STSCredentials, error) {
+	// Check cache first
+	cacheKey := fmt.Sprintf("creds:ns:%s:ak:%s", namespace, accessKeyID)
+	if cached, found := s.credentialCache.Get(cacheKey); found {
+		creds := cached.(*models.STSCredentials)
+		if creds.IsValid() {
+			logrus.Debugf("Cache hit for namespace credentials: %s (access_key_id: %s...)", namespace, accessKeyID[:min(8, len(accessKeyID))])
+			return creds, nil
+		}
+		// Expired, remove from cache
+		s.credentialCache.Delete(cacheKey)
+	}
+
+	// Look up hospital by namespace
+	hospital, err := s.getHospitalByNamespace(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("hospital not found for namespace %s: %w", namespace, err)
+	}
+
+	// Find the SPECIFIC approved response matching both hospital AND access_key_id
+	var response models.NodeAccessResponse
+	err = s.db.Where("hospital_id = ? AND status = ? AND access_key_id = ?",
+		hospital.ID, "APPROVED", accessKeyID).
+		First(&response).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("no approved credentials found for hospital %s (namespace: %s) with access_key_id %s",
+				hospital.Name, namespace, accessKeyID)
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	// Check if credentials are expired
+	if response.CredExpiration != nil && time.Now().After(*response.CredExpiration) {
+		return nil, fmt.Errorf("credentials expired for hospital %s (access_key_id: %s)", hospital.Name, accessKeyID)
+	}
+
+	// Build credentials object
+	creds := &models.STSCredentials{
+		AccessKeyID:     response.AccessKeyID,
+		SecretAccessKey: response.SecretAccessKey,
+		SessionToken:    response.SessionToken,
+		Expiration:      response.CredExpiration,
+		MinIOEndpoint:   getMinIOEndpoint(&response, hospital),
+		NessieNamespace: namespace,
+	}
+
+	// Cache the credentials
+	s.credentialCache.Set(cacheKey, creds, cache.DefaultExpiration)
+
+	logrus.Infof("Fetched credentials for namespace %s (hospital: %s, access_key_id: %s...)",
+		namespace, hospital.Name, accessKeyID[:min(8, len(accessKeyID))])
+	return creds, nil
+}
+
 // GetCredentialsByNamespace fetches STS credentials for a given Nessie namespace
-// This is used by the Metadata Interceptor to inject credentials into LoadTable responses
+// DEPRECATED for data access paths - use GetCredentialsByNamespaceAndAccessKey instead.
+// Still used for schema browsing where no specific access_key_id is needed.
 func (s *CredentialService) GetCredentialsByNamespace(namespace string) (*models.STSCredentials, error) {
 	// Check cache first
 	cacheKey := fmt.Sprintf("creds:ns:%s", namespace)
@@ -152,7 +211,6 @@ func (s *CredentialService) GetHospitalByNamespace(namespace string) (*models.Ho
 }
 
 // GetHospitalByBucket returns hospital info based on bucket name
-// The bucket name format is typically: "hospital-data" or could contain hospital identifier
 func (s *CredentialService) GetHospitalByBucket(bucket string) (*models.HospitalInfo, error) {
 	cacheKey := fmt.Sprintf("hospital:bucket:%s", bucket)
 	if cached, found := s.hospitalCache.Get(cacheKey); found {
@@ -172,8 +230,6 @@ func (s *CredentialService) GetHospitalByBucket(bucket string) (*models.Hospital
 		return info, nil
 	}
 
-	// Strategy 2: Look for bucket in the path pattern
-	// For now, we'll return an error - this can be extended based on actual bucket naming
 	return nil, fmt.Errorf("could not resolve hospital for bucket: %s", bucket)
 }
 
@@ -232,7 +288,6 @@ func (s *CredentialService) getHospitalByID(id uuid.UUID) (*models.Hospital, err
 }
 
 func getMinIOEndpoint(response *models.NodeAccessResponse, hospital *models.Hospital) string {
-	// Prefer endpoint from response, fall back to hospital config
 	if response.MinIOEndpoint != "" {
 		return response.MinIOEndpoint
 	}
@@ -251,4 +306,11 @@ func (s *CredentialService) InvalidateCache() {
 	s.credentialCache.Flush()
 	s.hospitalCache.Flush()
 	logrus.Info("Credential and hospital caches invalidated")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

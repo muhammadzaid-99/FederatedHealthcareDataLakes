@@ -134,6 +134,9 @@ services:
       ADMIN_PASSWORD: admin123
       LOG_LEVEL: info
       LOG_FORMAT: json
+      # Proxy settings (central-backend -> central-proxy)
+      PROXY_URL: http://central-proxy:8081
+      PROXY_INTERNAL_API_KEY: dev-internal-api-key-change-in-production
     ports:
       - "8080:8080"
     depends_on:
@@ -228,6 +231,8 @@ services:
       DB_SSL_MODE: disable
       # Nessie endpoint for metadata proxying
       NESSIE_ENDPOINT: http://nessie:19120
+      # Internal API key for service-to-service auth
+      INTERNAL_API_KEY: dev-internal-api-key-change-in-production
       # Cache settings
       CACHE_CREDENTIAL_TTL: 300
       CACHE_HOSPITAL_TTL: 600

@@ -1,8 +1,8 @@
 // Requestor API Client for central-web
-// Separate from admin/hospital APIs for separation of concerns
+// ALL requests go through central-backend (authenticated)
+// The central-proxy is internal-only and never called from the browser.
 
 const API_BASE = 'http://localhost:8080/api/v1'
-const PROXY_API = 'http://localhost:8081'
 
 export interface Requestor {
   id: string
@@ -86,6 +86,37 @@ export interface ColumnInfo {
   Type: string
   Extra?: string
   Comment?: string
+}
+
+// ---------------------------------------------------------------------------
+// Structured Query Builder types
+// ---------------------------------------------------------------------------
+
+export interface HospitalSelection {
+  access_response_id: string
+  departments: string[]
+  date_range_start?: string
+  date_range_end?: string
+}
+
+export interface StructuredQueryPayload {
+  selections: HospitalSelection[]
+  table_name: string
+  columns: string[]
+  limit: number
+}
+
+// An approved NodeAccessResponse enriched with hospital info
+export interface ApprovedAccess {
+  id: string
+  request_id: string
+  hospital_id: string
+  status: string
+  access_key_id?: string
+  departments?: string[]
+  date_range_start?: string
+  date_range_end?: string
+  hospital?: Hospital
 }
 
 // Hardcoded departments for request form
@@ -244,21 +275,48 @@ class RequestorAPIClient {
   }
 
   // ============================================================
-  // PROXY / QUERY ENDPOINTS
+  // QUERY ENDPOINTS (routed through central-backend, authenticated)
   // ============================================================
 
-  async executeQuery(query: string): Promise<QueryResult> {
-    const response = await fetch(`${PROXY_API}/api/trino/query`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query.trim() }),
+  /** Get all APPROVED access responses for the query builder form */
+  async getApprovedAccess(): Promise<{ responses: ApprovedAccess[] }> {
+    const response = await fetch(`${API_BASE}/requestor/approved-access`, {
+      headers: this.getHeaders(),
+      credentials: 'include',
     })
-
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to fetch approved access')
+    }
     return response.json()
   }
 
+  /** Execute a structured query (server-side SQL building) */
+  async executeStructuredQuery(payload: StructuredQueryPayload): Promise<QueryResult> {
+    const response = await fetch(`${API_BASE}/requestor/query`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Query execution failed')
+    }
+    return response.json()
+  }
+
+  /** Legacy: execute a raw SQL query (kept for backwards compat but will be removed) */
+  async executeQuery(query: string): Promise<QueryResult> {
+    // Deprecated – raw queries are no longer supported from the browser.
+    throw new Error('Raw queries are disabled. Use executeStructuredQuery instead.')
+  }
+
   async getSchemas(): Promise<SchemaInfo> {
-    const response = await fetch(`${PROXY_API}/api/trino/schemas`)
+    const response = await fetch(`${API_BASE}/requestor/schemas`, {
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch schemas')
     }
@@ -266,7 +324,10 @@ class RequestorAPIClient {
   }
 
   async getTables(schema: string): Promise<TableInfo> {
-    const response = await fetch(`${PROXY_API}/api/trino/schemas/${encodeURIComponent(schema)}/tables`)
+    const response = await fetch(`${API_BASE}/requestor/schemas/${encodeURIComponent(schema)}/tables`, {
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch tables')
     }
@@ -275,7 +336,11 @@ class RequestorAPIClient {
 
   async getColumns(schema: string, table: string): Promise<{ columns: ColumnInfo[] }> {
     const response = await fetch(
-      `${PROXY_API}/api/trino/schemas/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/columns`
+      `${API_BASE}/requestor/schemas/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/columns`,
+      {
+        headers: this.getHeaders(),
+        credentials: 'include',
+      }
     )
     if (!response.ok) {
       throw new Error('Failed to fetch columns')
@@ -284,7 +349,9 @@ class RequestorAPIClient {
   }
 
   async clearCache(): Promise<void> {
-    await fetch(`${PROXY_API}/admin/cache/invalidate`, { method: 'POST' })
+    // Cache invalidation now requires internal API key – not callable from browser.
+    // This is a no-op from the frontend.
+    console.warn('clearCache is no longer available from the frontend')
   }
 }
 

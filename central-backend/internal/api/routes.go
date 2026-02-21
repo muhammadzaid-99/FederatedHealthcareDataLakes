@@ -15,6 +15,7 @@ type Router struct {
 	authHandler     *handlers.AuthHandler
 	hospitalHandler *handlers.HospitalHandler
 	requestHandler  *handlers.RequestHandler
+	queryHandler    *handlers.QueryHandler
 	healthHandler   *handlers.HealthHandler
 	authService     *services.AuthService
 }
@@ -24,6 +25,7 @@ func NewRouter(
 	authHandler *handlers.AuthHandler,
 	hospitalHandler *handlers.HospitalHandler,
 	requestHandler *handlers.RequestHandler,
+	queryHandler *handlers.QueryHandler,
 	healthHandler *handlers.HealthHandler,
 	authService *services.AuthService,
 ) *Router {
@@ -32,6 +34,7 @@ func NewRouter(
 		authHandler:     authHandler,
 		hospitalHandler: hospitalHandler,
 		requestHandler:  requestHandler,
+		queryHandler:    queryHandler,
 		healthHandler:   healthHandler,
 		authService:     authService,
 	}
@@ -177,6 +180,22 @@ func (r *Router) Setup() *gin.Engine {
 
 			// Get active hospitals for request form
 			requestor.GET("/hospitals", r.requestHandler.GetActiveHospitals)
+
+			// ============================================================
+			// QUERY ENDPOINTS (server-side query builder)
+			// All queries are built server-side with validated access policies
+			// ============================================================
+
+			// Approved access responses for the query builder form
+			requestor.GET("/approved-access", r.queryHandler.GetApprovedAccess)
+
+			// Structured query execution
+			requestor.POST("/query", r.queryHandler.ExecuteStructuredQuery)
+
+			// Schema browsing (proxied through central-backend)
+			requestor.GET("/schemas", r.queryHandler.GetSchemas)
+			requestor.GET("/schemas/:schema/tables", r.queryHandler.GetTables)
+			requestor.GET("/schemas/:schema/tables/:table/columns", r.queryHandler.GetColumns)
 		}
 	}
 

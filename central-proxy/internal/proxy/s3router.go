@@ -61,6 +61,10 @@ func (r *S3DataRouter) Handle(c *gin.Context) {
 
 	logrus.Debugf("S3 Router: bucket=%s, object=%s", bucketName, objectPath)
 
+	// Extract namespace (which may contain ::access_key_id) from the path
+	rawNamespace := r.extractNamespaceFromPath(trimmedPath)
+	realNamespace, accessKeyID := parseNamespaceAccessKey(rawNamespace)
+
 	// Look up the hospital for this bucket
 	var hospital *models.HospitalInfo
 	var creds *models.STSCredentials
@@ -70,9 +74,8 @@ func (r *S3DataRouter) Handle(c *gin.Context) {
 	if err != nil {
 		// Try to resolve using namespace from the path
 		// Pattern: /s3/hospital-data/iceberg/{namespace}/...
-		namespace := r.extractNamespaceFromPath(trimmedPath)
-		if namespace != "" {
-			hospital, err = r.credService.GetHospitalByNamespace(namespace)
+		if realNamespace != "" {
+			hospital, err = r.credService.GetHospitalByNamespace(realNamespace)
 		}
 	}
 
@@ -94,7 +97,12 @@ func (r *S3DataRouter) Handle(c *gin.Context) {
 	}
 
 	// Get credentials for this hospital
-	creds, err = r.credService.GetCredentialsByNamespace(hospital.NessieNamespace)
+	// If access_key_id was encoded in the namespace, use the specific credential lookup
+	if accessKeyID != "" {
+		creds, err = r.credService.GetCredentialsByNamespaceAndAccessKey(hospital.NessieNamespace, accessKeyID)
+	} else {
+		creds, err = r.credService.GetCredentialsByNamespace(hospital.NessieNamespace)
+	}
 	if err != nil {
 		logrus.Errorf("Failed to get credentials for hospital %s: %v", hospital.Name, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get credentials"})
@@ -209,6 +217,7 @@ func (r *S3DataRouter) signRequest(req *http.Request, creds *models.STSCredentia
 // Expected patterns:
 // - /hospital-data/iceberg/{namespace}/table/data/...
 // - /iceberg/{namespace}/table/...
+// The namespace may contain "::access_key_id" which we preserve for credential lookup.
 func (r *S3DataRouter) extractNamespaceFromPath(path string) string {
 	parts := strings.Split(path, "/")
 
@@ -220,4 +229,14 @@ func (r *S3DataRouter) extractNamespaceFromPath(path string) string {
 	}
 
 	return ""
+}
+
+// parseNamespaceAccessKey splits a namespace that may contain "::access_key_id"
+// Returns (realNamespace, accessKeyID). If no separator found, accessKeyID is empty.
+func parseNamespaceAccessKey(namespace string) (string, string) {
+	idx := strings.Index(namespace, "::")
+	if idx == -1 {
+		return namespace, ""
+	}
+	return namespace[:idx], namespace[idx+2:]
 }
