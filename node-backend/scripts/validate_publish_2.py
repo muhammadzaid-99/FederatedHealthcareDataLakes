@@ -21,7 +21,7 @@ import io
 from contextlib import redirect_stdout, redirect_stderr
 from pyspark.sql import SparkSession, DataFrame, Row
 from pyspark.sql.types import StructType, StructField, StringType
-from pyspark.sql.functions import lit, current_timestamp, date_format
+from pyspark.sql.functions import lit, current_timestamp, date_format, to_date, col, when, coalesce
 from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
@@ -95,29 +95,31 @@ def write_iceberg_spark(
     spark = df.sparkSession
     
     # Ensure department_name is never null/empty for partitioning
-    from pyspark.sql.functions import when, lit as spark_lit, col as spark_col, to_date, coalesce
     if "department_name" in df.columns:
         df = df.withColumn(
             "department_name",
-            when((spark_col("department_name").isNull()) | (spark_col("department_name") == ""), spark_lit("unassigned"))
-            .otherwise(spark_col("department_name"))
+            when((col("department_name").isNull()) | (col("department_name") == ""), lit("unassigned"))
+            .otherwise(col("department_name"))
         )
     else:
-        df = df.withColumn("department_name", spark_lit("unassigned"))
+        df = df.withColumn("department_name", lit("unassigned"))
+        
+    # df.select("checkup_created_at").show(10, False)
+    # df.printSchema()
     
     # Extract date from checkup_created_at for partitioning (use actual data date, not ingest date)
-    # Use to_date() to properly convert timestamp to date, with coalesce to handle nulls
-    if "checkup_created_at" in df.columns:
-        df = df.withColumn(
-            "checkup_date", 
-            date_format(
-                coalesce(to_date(spark_col("checkup_created_at")), current_timestamp()),
-                "yyyy-MM-dd"
-            )
+    # Use date_format to cast timestamp to date string, then convert to date type
+    if "checkup_created_at" not in df.columns:
+        raise Exception("checkup_created_at column missing")
+    
+    df = df.withColumn(
+        "checkup_date",
+        coalesce(
+            to_date(col("checkup_created_at"), "yyyy-MM-dd HH:mm:ss.SSS"),
+            to_date(col("checkup_created_at"), "yyyy-MM-dd HH:mm:ss"),
+            to_date(col("checkup_created_at"), "yyyy-MM-dd"),
         )
-    else:
-        # Fallback to current date if checkup_created_at is missing
-        df = df.withColumn("checkup_date", date_format(current_timestamp(), "yyyy-MM-dd"))
+    )
     
     df2 = (df 
         .withColumn("batch_id", lit(run_id))
@@ -242,6 +244,10 @@ def _to_safe_str(v):
         return None
     if isinstance(v, str):
         return v
+    # datetime/date must become plain strings, NOT json.dumps (which adds extra quotes)
+    import datetime as _dt
+    if isinstance(v, (_dt.datetime, _dt.date)):
+        return str(v)
     try:
         return json.dumps(v, default=str)
     except Exception:
