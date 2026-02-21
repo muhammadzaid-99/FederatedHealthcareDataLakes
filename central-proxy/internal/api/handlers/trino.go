@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hms-fyp/central-proxy/internal/services"
+	"github.com/sirupsen/logrus"
 )
 
 // TrinoHandler handles Trino query requests
@@ -29,6 +30,8 @@ func (h *TrinoHandler) ExecuteQuery(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Query is required"})
 		return
 	}
+
+	logrus.Info("Query request: ", req.Query)
 
 	result, err := h.trinoService.ExecuteQuery(req.Query)
 	if err != nil {

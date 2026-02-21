@@ -17,6 +17,7 @@ type Config struct {
 	App      AppConfig
 	Admin    AdminConfig
 	Logging  LoggingConfig
+	Proxy    ProxyConfig
 }
 
 type DatabaseConfig struct {
@@ -58,6 +59,12 @@ type LoggingConfig struct {
 	Format string
 }
 
+// ProxyConfig holds settings for communicating with the central-proxy
+type ProxyConfig struct {
+	Endpoint       string // e.g. http://central-proxy:8081
+	InternalAPIKey string // shared secret to authenticate with proxy
+}
+
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	// Try to load .env file (ignore error if not exists)
@@ -96,6 +103,10 @@ func Load() (*Config, error) {
 		Logging: LoggingConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "json"),
+		},
+		Proxy: ProxyConfig{
+			Endpoint:       getEnv("PROXY_URL", "http://central-proxy:8081"),
+			InternalAPIKey: getEnv("PROXY_INTERNAL_API_KEY", "dev-internal-api-key-change-in-production"),
 		},
 	}
 

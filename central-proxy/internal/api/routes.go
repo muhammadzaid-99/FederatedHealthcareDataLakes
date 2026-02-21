@@ -11,6 +11,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// InternalAPIKeyMiddleware validates the X-Internal-API-Key header
+// This protects endpoints that should only be accessible from central-backend
+func InternalAPIKeyMiddleware(apiKey string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if apiKey == "" {
+			// If no key configured, allow all (development mode)
+			c.Next()
+			return
+		}
+		provided := c.GetHeader("X-Internal-API-Key")
+		if provided != apiKey {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: invalid or missing internal API key"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 // SetupRoutes configures all API routes for the central proxy
 func SetupRoutes(
 	r *gin.Engine,
@@ -18,6 +37,7 @@ func SetupRoutes(
 	s3Router *proxy.S3DataRouter,
 	credService *services.CredentialService,
 	trinoService *services.TrinoService,
+	internalAPIKey string,
 ) {
 	// Health check endpoint
 	r.GET("/health", func(c *gin.Context) {
@@ -50,9 +70,10 @@ func SetupRoutes(
 	r.Any("/s3/*path", s3Router.Handle)
 
 	// =====================================
-	// Admin/Debug Routes (should be protected in production)
+	// Admin/Debug Routes (protected by internal API key)
 	// =====================================
 	admin := r.Group("/admin")
+	admin.Use(InternalAPIKeyMiddleware(internalAPIKey))
 	{
 		// List all hospitals and their endpoints
 		admin.GET("/hospitals", func(c *gin.Context) {
@@ -93,11 +114,12 @@ func SetupRoutes(
 	}
 
 	// =====================================
-	// Trino Query Routes
+	// Trino Query Routes (protected by internal API key)
 	// =====================================
 	if trinoService != nil {
 		trinoHandler := handlers.NewTrinoHandler(trinoService)
 		trinoGroup := r.Group("/api/trino")
+		trinoGroup.Use(InternalAPIKeyMiddleware(internalAPIKey))
 		{
 			// Execute a SQL query
 			trinoGroup.POST("/query", trinoHandler.ExecuteQuery)

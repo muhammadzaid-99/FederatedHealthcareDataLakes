@@ -71,7 +71,7 @@ func main() {
 	router.Use(loggingMiddleware())
 
 	// Setup routes
-	api.SetupRoutes(router, icebergCatalog, s3Router, credService, trinoService)
+	api.SetupRoutes(router, icebergCatalog, s3Router, credService, trinoService, cfg.InternalAPIKey)
 
 	// Create HTTP server
 	server := &http.Server{

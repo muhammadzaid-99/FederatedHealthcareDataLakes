@@ -64,6 +64,7 @@ func main() {
 	// Initialize business services
 	hospitalService := services.NewHospitalService(cfg, authService, nessieService, rabbitMQService, auditService)
 	requestService := services.NewRequestService(rabbitMQService, auditService)
+	queryBuilderService := services.NewQueryBuilderService(cfg.Proxy.Endpoint, cfg.Proxy.InternalAPIKey)
 
 	// Initialize default admin
 	if err := authService.InitializeDefaultAdmin(); err != nil {
@@ -76,6 +77,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService, hospitalService)
 	hospitalHandler := handlers.NewHospitalHandler(hospitalService, auditService)
 	requestHandler := handlers.NewRequestHandler(requestService, auditService)
+	queryHandler := handlers.NewQueryHandler(queryBuilderService, auditService)
 	healthHandler := handlers.NewHealthHandler(nessieService, rabbitMQService)
 
 	// Setup router
@@ -84,6 +86,7 @@ func main() {
 		authHandler,
 		hospitalHandler,
 		requestHandler,
+		queryHandler,
 		healthHandler,
 		authService,
 	)
