@@ -2,7 +2,7 @@
 // ALL requests go through central-backend (authenticated)
 // The central-proxy is internal-only and never called from the browser.
 
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = process.env.API_BASE || 'http://localhost:8080/api/v1'
 
 export interface Requestor {
   id: string
@@ -134,6 +134,7 @@ class RequestorAPIClient {
   private getHeaders(): HeadersInit {
     return {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
     }
   }
 
@@ -144,7 +145,7 @@ class RequestorAPIClient {
   async register(name: string, email: string, password: string, organization: string): Promise<{ message: string; requestor: Requestor }> {
     const response = await fetch(`${API_BASE}/requestors/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
       body: JSON.stringify({ name, email, password, organization }),
     })
 
@@ -159,7 +160,7 @@ class RequestorAPIClient {
   async login(email: string, password: string): Promise<{ message: string; requestor: Requestor }> {
     const response = await fetch(`${API_BASE}/auth/requestor/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
       credentials: 'include',
       body: JSON.stringify({ email, password }),
     })
@@ -175,6 +176,7 @@ class RequestorAPIClient {
   async logout(): Promise<void> {
     await fetch(`${API_BASE}/auth/requestor/logout`, {
       method: 'POST',
+      headers: { 'ngrok-skip-browser-warning': 'true' },
       credentials: 'include',
     })
   }

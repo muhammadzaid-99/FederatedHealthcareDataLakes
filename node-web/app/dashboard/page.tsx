@@ -3,10 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, storage } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DashboardShell } from '@/components/dashboard-shell';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Database, FileText, LogOut, MessageSquare, RefreshCw, Server, Settings, Workflow } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Activity,
+  Database,
+  FileText,
+  MessageSquare,
+  Plug,
+  RefreshCw,
+  Server,
+  Settings,
+  Workflow,
+  ChevronRight,
+  CircleDot,
+} from 'lucide-react';
 import { formatDateTimeString, formatTimeString } from '@/lib/utils';
 
 export default function DashboardPage() {
@@ -19,10 +31,7 @@ export default function DashboardPage() {
 
   const loadNodeStatus = async () => {
     const token = storage.getToken();
-    if (!token) {
-      router.push('/login');
-      return;
-    }
+    if (!token) { router.push('/login'); return; }
 
     try {
       setRefreshing(true);
@@ -31,7 +40,6 @@ export default function DashboardPage() {
       storage.setUserInfo(response.config);
       setError('');
     } catch (err: any) {
-      // If node is not configured yet, that's OK - just show empty state
       if (err.message.includes('node not configured yet') || err.message.includes('404')) {
         setHospitalInfo(null);
         setError('');
@@ -49,294 +57,237 @@ export default function DashboardPage() {
 
   const loadSchedulerStatus = async () => {
     try {
-      const response = await api.get("/etl/scheduler/status");
+      const response = await api.get('/etl/scheduler/status');
       setSchedulerStatus(response);
-    } catch (error) {
-      // Scheduler status is optional, don't show error
-      console.log("Scheduler status not available");
+    } catch {
+      console.log('Scheduler status not available');
     }
   };
 
   useEffect(() => {
     loadNodeStatus();
     loadSchedulerStatus();
-
-    // Refresh scheduler status every 10 seconds
     const interval = setInterval(loadSchedulerStatus, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogout = () => {
-    storage.clear();
-    router.push('/');
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading node status...</p>
+      <DashboardShell title="Dashboard" description="Loading node status…">
+        <div className="flex items-center justify-center py-32">
+          <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
         </div>
-      </div>
+      </DashboardShell>
     );
   }
 
   if (error && !hospitalInfo) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>{error}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => router.push('/')} className="w-full">
-              Back to Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <DashboardShell title="Dashboard" description="Error">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center max-w-md mx-auto mt-20">
+          <p className="text-sm text-red-700 mb-4">{error}</p>
+          <Button onClick={() => router.push('/login')} className="bg-blue-600 hover:bg-blue-700">
+            Back to Login
+          </Button>
+        </div>
+      </DashboardShell>
     );
   }
 
+  const quickActions = [
+    { href: '/requests', icon: FileText, label: 'Data Requests', desc: 'View and respond to incoming data access requests', color: 'blue' },
+    { href: '/queue-viewer', icon: MessageSquare, label: 'Queue Viewer', desc: 'Monitor RabbitMQ messages in real-time', color: 'amber' },
+    { href: '/etl/config', icon: Settings, label: 'ETL Config', desc: 'Configure data extraction & transformation', color: 'violet' },
+    { href: '/etl/jobs', icon: Workflow, label: 'ETL Jobs', desc: 'Monitor ETL job executions', color: 'cyan' },
+  ];
+
+  const colorMap: Record<string, { bg: string; text: string; shadow: string }> = {
+    blue:   { bg: 'bg-blue-100', text: 'text-blue-600', shadow: 'shadow-blue-500/5' },
+    amber:  { bg: 'bg-amber-100', text: 'text-amber-600', shadow: 'shadow-amber-500/5' },
+    violet: { bg: 'bg-violet-100', text: 'text-violet-600', shadow: 'shadow-violet-500/5' },
+    cyan:   { bg: 'bg-cyan-100', text: 'text-cyan-600', shadow: 'shadow-cyan-500/5' },
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Activity className="h-8 w-8 text-blue-600 mr-3" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Hospital Node Portal
-                </h1>
-                <p className="text-sm text-gray-600">
-                  {hospitalInfo?.handshake_done ? 'Connected' : 'Not Connected'}
-                </p>
+    <DashboardShell
+      title="Dashboard"
+      description={hospitalInfo?.handshake_done ? 'Connected to central network' : 'Node not connected'}
+      actions={
+        <Button variant="outline" size="sm" onClick={loadNodeStatus} disabled={refreshing} className="h-9">
+          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      }
+    >
+      {/* Quick Action Cards */}
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+        {quickActions.map((action) => {
+          const c = colorMap[action.color];
+          return (
+            <button
+              key={action.href}
+              onClick={() => router.push(action.href)}
+              className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all hover:shadow-lg hover:-translate-y-0.5"
+            >
+              <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${c.bg} mb-4`}>
+                <action.icon className={`h-5 w-5 ${c.text}`} />
               </div>
+              <h3 className="text-sm font-semibold text-slate-900 mb-1 flex items-center gap-1">
+                {action.label}
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">{action.desc}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Status Row */}
+      <div className="grid sm:grid-cols-3 gap-5 mb-8">
+        {/* Node Status */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100">
+              <Server className="h-4 w-4 text-indigo-600" />
             </div>
-            <div className="flex items-center space-x-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadNodeStatus}
-                disabled={refreshing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
+            <h3 className="text-sm font-semibold text-slate-900">Node Status</h3>
           </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-8">
-        {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/requests')}>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2 text-blue-600" />
-                Data Requests
-              </CardTitle>
-              <CardDescription>
-                View and respond to incoming data access requests
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/queue-viewer')}>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <MessageSquare className="h-5 w-5 mr-2 text-orange-600" />
-                Queue Viewer
-              </CardTitle>
-              <CardDescription>
-                Monitor RabbitMQ messages in real-time
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/etl/config')}>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Workflow className="h-5 w-5 mr-2 text-purple-600" />
-                ETL Config
-              </CardTitle>
-              <CardDescription>
-                Configure data extraction and transformation
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/etl/jobs')}>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Database className="h-5 w-5 mr-2 text-cyan-600" />
-                ETL Jobs
-              </CardTitle>
-              <CardDescription>
-                Monitor ETL job executions
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          {hospitalInfo?.handshake_done ? (
+            <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">
+              <CircleDot className="h-3 w-3 mr-1 text-emerald-500" />
+              Active
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="border border-slate-200">Not Configured</Badge>
+          )}
         </div>
 
-        {/* Second row */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/handshake')}>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Settings className="h-5 w-5 mr-2 text-green-600" />
-                Configuration
-              </CardTitle>
-              <CardDescription>
-                {hospitalInfo?.handshake_done ? 'Update node settings' : 'Configure node'}
-              </CardDescription>
-            </CardHeader>
-          </Card>
+        {/* Configuration */}
+        <button
+          onClick={() => router.push('/handshake')}
+          className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100">
+              <Plug className="h-4 w-4 text-emerald-600" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-900">Configuration</h3>
+          </div>
+          <p className="text-xs text-slate-500">
+            {hospitalInfo?.handshake_done ? 'Update node settings' : 'Configure node'}
+          </p>
+        </button>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Server className="h-5 w-5 mr-2 text-indigo-600" />
-                Node Status
-              </CardTitle>
-              <CardDescription>
-                {hospitalInfo?.handshake_done ? (
-                  <Badge variant="default">Active</Badge>
-                ) : (
-                  <Badge variant="secondary">Not Configured</Badge>
-                )}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Activity className="h-5 w-5 mr-2 text-green-600" />
-                ETL Scheduler
-              </CardTitle>
-              <CardDescription>
-                {schedulerStatus ? (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Status:</span>
-                      <Badge variant={schedulerStatus.is_running ? "default" : "secondary"}>
-                        {schedulerStatus.is_running ? "Running" : "Stopped"}
-                      </Badge>
-                    </div>
-                    {schedulerStatus.is_running && schedulerStatus.next_run && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Next Run:</span>
-                        <span className="text-xs">{formatTimeString(schedulerStatus.next_run)}</span>
-                      </div>
-                    )}
-                    {schedulerStatus.is_running && schedulerStatus.next_run_in_seconds > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">In:</span>
-                        <span className="text-xs font-mono">
-                          {Math.floor(schedulerStatus.next_run_in_seconds / 60)}m {schedulerStatus.next_run_in_seconds % 60}s
-                        </span>
-                      </div>
-                    )}
-                    {!schedulerStatus.is_running && (
-                      <div className="text-xs text-muted-foreground">
-                        Start from ETL Config page
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <Badge variant="outline">Not Configured</Badge>
-                )}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-
-        {/* Node Configuration Status */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Node Configuration</CardTitle>
-            <CardDescription>Current node settings and status</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {hospitalInfo?.handshake_done ? (
-              <div className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Connection Details</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-sm text-gray-600">Client ID:</span>
-                        <span className="text-sm font-mono">{hospitalInfo?.client_id}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-sm text-gray-600">Queue Name:</span>
-                        <span className="text-sm font-mono">{hospitalInfo?.queue_name || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-sm text-gray-600">Nessie Namespace:</span>
-                        <span className="text-sm font-mono">{hospitalInfo?.nessie_namespace || 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-sm text-gray-600">Handshake Status:</span>
-                        <Badge variant="default">Connected</Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Timestamps</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-sm text-gray-600">Configured At:</span>
-                        <span className="text-sm">
-                          {hospitalInfo?.configured_at ? formatDateTimeString(hospitalInfo.configured_at) : 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-4">
-                  <Button onClick={() => router.push('/handshake')} variant="outline" className="flex-1">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Reconfigure / Re-handshake
-                  </Button>
-                  <Button onClick={loadNodeStatus} variant="outline">
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Node Not Configured</h3>
-                <p className="text-gray-600 mb-6">
-                  You need to configure your node with credentials from the central portal before you can start using it.
+        {/* ETL Scheduler */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100">
+              <Activity className="h-4 w-4 text-blue-600" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-900">ETL Scheduler</h3>
+          </div>
+          {schedulerStatus ? (
+            <div className="space-y-2">
+              <Badge className={schedulerStatus.is_running
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50'
+                : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-100'
+              }>
+                {schedulerStatus.is_running ? 'Running' : 'Stopped'}
+              </Badge>
+              {schedulerStatus.is_running && schedulerStatus.next_run && (
+                <p className="text-xs text-slate-500">
+                  Next run: <span className="font-mono">{formatTimeString(schedulerStatus.next_run)}</span>
                 </p>
-                <Button onClick={() => router.push('/handshake')}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configure Node
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+              {schedulerStatus.is_running && schedulerStatus.next_run_in_seconds > 0 && (
+                <p className="text-xs text-slate-500">
+                  In: <span className="font-mono">{Math.floor(schedulerStatus.next_run_in_seconds / 60)}m {schedulerStatus.next_run_in_seconds % 60}s</span>
+                </p>
+              )}
+              {!schedulerStatus.is_running && (
+                <p className="text-xs text-slate-400">Start from ETL Config page</p>
+              )}
+            </div>
+          ) : (
+            <Badge variant="outline" className="text-slate-500">Not Configured</Badge>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Node Configuration Details */}
+      <div className="rounded-2xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Node Configuration</h2>
+            <p className="text-sm text-slate-500">Current node settings and status</p>
+          </div>
+          {hospitalInfo?.handshake_done && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push('/handshake')}>
+                <Settings className="h-3.5 w-3.5 mr-1.5" />
+                Reconfigure
+              </Button>
+              <Button variant="ghost" size="sm" onClick={loadNodeStatus}>
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="p-6">
+          {hospitalInfo?.handshake_done ? (
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Connection Details */}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Connection Details</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Client ID', value: hospitalInfo?.client_id },
+                    { label: 'Queue Name', value: hospitalInfo?.queue_name || 'N/A' },
+                    { label: 'Nessie Namespace', value: hospitalInfo?.nessie_namespace || 'N/A' },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+                      <span className="text-sm text-slate-500">{item.label}</span>
+                      <span className="text-sm font-mono text-slate-900 bg-slate-50 px-2 py-0.5 rounded">{item.value}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-slate-500">Handshake</span>
+                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-50">Connected</Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Timestamps */}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Timestamps</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between py-2.5 border-b border-slate-100">
+                    <span className="text-sm text-slate-500">Configured At</span>
+                    <span className="text-sm text-slate-700">
+                      {hospitalInfo?.configured_at ? formatDateTimeString(hospitalInfo.configured_at) : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 mb-4">
+                <Server className="h-7 w-7 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Node Not Configured</h3>
+              <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">
+                Configure your node with credentials from the central portal to start using it.
+              </p>
+              <Button onClick={() => router.push('/handshake')} className="bg-blue-600 hover:bg-blue-700">
+                <Plug className="mr-2 h-4 w-4" />
+                Configure Node
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </DashboardShell>
   );
 }

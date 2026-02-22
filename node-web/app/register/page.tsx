@@ -3,10 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, storage } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, Lock, Mail, User, UserPlus } from 'lucide-react';
+import { Loader2, Lock, Mail, User, UserPlus, Activity } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,14 +22,12 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
 
-    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
       return;
     }
 
-    // Validate password strength
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long');
       setLoading(false);
@@ -39,19 +35,16 @@ export default function RegisterPage() {
     }
 
     try {
-      const response = await api.register({
+      await api.register({
         username: formData.username,
         email: formData.email,
         password: formData.password,
-        role: 'operator', // Default role
+        role: 'operator',
       });
 
-      // Auto-login after registration
       const loginResponse = await api.login(formData.username, formData.password);
       storage.setToken(loginResponse.token);
       storage.setUserInfo(loginResponse.user);
-
-      // Redirect to dashboard
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -61,124 +54,157 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="flex items-center justify-center mb-2">
-            <UserPlus className="h-8 w-8 text-blue-600" />
+    <div className="flex min-h-screen">
+      {/* Left branding panel */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-slate-900 p-12 text-white relative overflow-hidden">
+        <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
+        <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-cyan-500/15 blur-3xl" />
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600">
+              <Activity className="h-5 w-5 text-white" />
+            </div>
+            <span className="text-xl font-bold">Hospital Node</span>
           </div>
-          <CardTitle className="text-2xl text-center">Create Account</CardTitle>
-          <CardDescription className="text-center">
-            Register to access your hospital node management portal
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          <p className="text-sm text-slate-400">Federated Data Sharing Portal</p>
+        </div>
+
+        <div className="relative z-10 space-y-6">
+          <h2 className="text-3xl font-bold leading-tight">
+            Join the federated<br />
+            <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+              healthcare network
+            </span>
+          </h2>
+          <p className="text-slate-400 leading-relaxed max-w-md">
+            Create an operator account to manage your hospital node, process data requests, and configure ETL pipelines.
+          </p>
+        </div>
+
+        <p className="relative z-10 text-xs text-slate-500">
+          Hospital Management System &mdash; Federated DLS
+        </p>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex w-full lg:w-1/2 flex-col items-center justify-center bg-white px-6 py-12">
+        <div className="w-full max-w-sm">
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center gap-2 mb-8">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600">
+              <Activity className="h-5 w-5 text-white" />
+            </div>
+            <span className="text-lg font-bold text-slate-900">Hospital Node</span>
+          </div>
+
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">Create Account</h1>
+          <p className="text-sm text-slate-500 mb-8">Register to access the hospital node portal</p>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Username</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Username</label>
               <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   required
                   type="text"
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   placeholder="Choose a username"
-                  className="pl-10"
+                  className="pl-10 h-11"
                   minLength={3}
                 />
               </div>
-              <p className="text-xs text-gray-500">At least 3 characters</p>
+              <p className="text-xs text-slate-400">At least 3 characters</p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Email</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   required
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="your.email@hospital.com"
-                  className="pl-10"
+                  className="pl-10 h-11"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Password</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   required
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Choose a strong password"
-                  className="pl-10"
+                  className="pl-10 h-11"
                   minLength={6}
                 />
               </div>
-              <p className="text-xs text-gray-500">At least 6 characters</p>
+              <p className="text-xs text-slate-400">At least 6 characters</p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Confirm Password</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Confirm Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
                   required
                   type="password"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   placeholder="Confirm your password"
-                  className="pl-10"
+                  className="pl-10 h-11"
                   minLength={6}
                 />
               </div>
             </div>
 
-            <Button
+            <button
               type="submit"
               disabled={loading}
-              className="w-full"
-              size="lg"
+              className="w-full h-11 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-medium text-sm
+                         hover:from-blue-700 hover:to-cyan-700 transition-all duration-200
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
             >
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating Account...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating Account…
                 </>
               ) : (
                 <>
-                  <UserPlus className="mr-2 h-4 w-4" />
+                  <UserPlus className="h-4 w-4" />
                   Create Account
                 </>
               )}
-            </Button>
+            </button>
 
-            <div className="text-center text-sm text-gray-600 mt-4">
-              <p>
+            <div className="text-center pt-2">
+              <p className="text-sm text-slate-500">
                 Already have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => router.push('/login')}
-                  className="text-blue-600 hover:underline font-medium"
-                >
+                <button type="button" onClick={() => router.push('/login')} className="text-blue-600 hover:text-blue-700 font-medium">
                   Sign in
                 </button>
               </p>
             </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, storage } from '@/lib/api';
+import { DashboardShell } from '@/components/dashboard-shell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Loader2, MessageSquare, RefreshCw, AlertCircle } from 'lucide-react';
+import { AlertCircle, Inbox, MessageSquare, RefreshCw } from 'lucide-react';
 
 export default function QueueViewerPage() {
   const router = useRouter();
@@ -17,16 +17,12 @@ export default function QueueViewerPage() {
 
   const loadMessages = async () => {
     const token = storage.getToken();
-    if (!token) {
-      router.push('/login');
-      return;
-    }
+    if (!token) { router.push('/login'); return; }
 
     try {
       setRefreshing(true);
       setError('');
       const response = await api.getMessages(token);
-      console.log(response)
       setMessages(response.messages || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load messages');
@@ -40,139 +36,116 @@ export default function QueueViewerPage() {
     }
   };
 
-  useEffect(() => {
-    loadMessages();
-  }, []);
+  useEffect(() => { loadMessages(); }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading messages...</p>
-        </div>
-      </div>
-    );
-  }
+  const statusColor = (status: string) => {
+    if (status === 'processed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    return 'bg-slate-100 text-slate-600 border-slate-200';
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/dashboard')}
-          className="mb-6"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
-        </Button>
-
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">RabbitMQ Messages</h1>
-          <p className="text-gray-600">View messages received from the central backend</p>
-        </div>
-
-        {error && (
-          <Card className="mb-6 border-red-200 bg-red-50">
-            <CardContent className="pt-6">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-red-900">Error</p>
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-              Connected
-            </Badge>
-            <span className="text-sm text-gray-600">
-              {messages.length} message{messages.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadMessages}
-            disabled={refreshing}
-          >
+    <DashboardShell
+      title="Queue Viewer"
+      description="RabbitMQ messages from the central backend"
+      actions={
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse" />
+            Connected
+          </Badge>
+          <span className="text-sm text-slate-500">
+            {messages.length} message{messages.length !== 1 ? 's' : ''}
+          </span>
+          <Button variant="outline" size="sm" onClick={loadMessages} disabled={refreshing} className="h-9">
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
-
-        {/* Messages List */}
-        {messages.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No messages yet</h3>
-              <p className="text-gray-600">
-                Waiting for incoming messages from RabbitMQ...
-              </p>
-              <p className="text-sm text-gray-500 mt-2">
-                Messages will appear here after handshake is complete
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message: any) => (
-              <Card key={message.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{message.message_type || 'Message'}</CardTitle>
-                      <CardDescription>
-                        {new Date(message.created_at).toLocaleString("en-PK")}
-                      </CardDescription>
-                    </div>
-                    <Badge variant={message.status === 'processed' ? 'default' : 'secondary'}>
-                      {message.status}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">Queue:</p>
-                    <p className="text-sm font-mono text-gray-900">{message.queue_name}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">Payload:</p>
-                    <div className="bg-gray-50 rounded-lg p-3 max-h-96 overflow-auto">
-                      <pre className="text-xs text-gray-800 whitespace-pre-wrap">
-                        {typeof message.payload === 'string' 
-                          ? message.payload 
-                          : JSON.stringify(message.payload, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-
-                  {message.error_message && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-sm font-medium text-red-900">Error:</p>
-                      <p className="text-sm text-red-700">{message.error_message}</p>
-                    </div>
-                  )}
-
-                  {message.processed_at && (
-                    <div className="text-xs text-gray-500">
-                      Processed at: {new Date(message.processed_at).toLocaleString("en-PK")}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+      }
+    >
+      {error && (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-900">Error</p>
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-32">
+          <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
+        </div>
+      ) : messages.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 mb-4">
+            <Inbox className="h-7 w-7 text-slate-400" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-900 mb-1">No messages yet</h3>
+          <p className="text-sm text-slate-500 max-w-sm mx-auto">
+            Messages will appear here once your node has completed the handshake and the central backend starts forwarding requests.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {messages.map((message: any) => (
+            <div key={message.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              {/* Message Header */}
+              <div className="flex items-start justify-between p-5 border-b border-slate-100">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+                    <MessageSquare className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">{message.message_type || 'Message'}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {new Date(message.created_at).toLocaleString('en-PK')}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className={statusColor(message.status)}>
+                  {message.status}
+                </Badge>
+              </div>
+
+              {/* Message Body */}
+              <div className="p-5 space-y-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Queue</p>
+                  <p className="text-sm font-mono text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg inline-block">{message.queue_name}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Payload</p>
+                  <div className="bg-slate-900 rounded-xl p-4 max-h-80 overflow-auto scrollbar-thin">
+                    <pre className="text-xs text-emerald-400 whitespace-pre-wrap font-mono">
+                      {typeof message.payload === 'string'
+                        ? message.payload
+                        : JSON.stringify(message.payload, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+
+                {message.error_message && (
+                  <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+                    <p className="text-xs font-semibold text-red-900 mb-1">Error</p>
+                    <p className="text-sm text-red-700">{message.error_message}</p>
+                  </div>
+                )}
+
+                {message.processed_at && (
+                  <p className="text-xs text-slate-400">
+                    Processed at: {new Date(message.processed_at).toLocaleString('en-PK')}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </DashboardShell>
   );
 }

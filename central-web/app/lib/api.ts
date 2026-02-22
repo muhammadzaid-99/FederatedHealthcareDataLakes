@@ -1,5 +1,5 @@
 // Use backend URL directly since Next.js rewrites don't work in dev mode
-const API_BASE = 'http://localhost:8080/api/v1'
+const API_BASE = process.env.API_BASE || 'http://localhost:8080/api/v1'
 
 export interface LoginResponse {
   token: string
