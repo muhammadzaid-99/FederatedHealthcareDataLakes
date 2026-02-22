@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   ArrowRight,
 } from 'lucide-react'
+import { api } from '@/lib/api'
 
 export default function HospitalLoginPage() {
   const router = useRouter()
@@ -30,18 +31,7 @@ export default function HospitalLoginPage() {
     setSubmitting(true)
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/hospital/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData),
-      })
-
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.error || 'Login failed')
-      }
-
+      await api.hospitalLogin(formData.email, formData.password)
       router.push('/hospital/dashboard')
     } catch (err: any) {
       setError(err.message || 'Failed to login')

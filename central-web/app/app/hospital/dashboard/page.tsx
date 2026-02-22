@@ -30,6 +30,7 @@ import {
   Hash,
   CalendarDays,
 } from 'lucide-react'
+import { api } from '@/lib/api'
 
 interface HospitalInfo {
   id: string
@@ -68,42 +69,26 @@ export default function HospitalDashboardPage() {
 
   const loadHospitalInfo = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/v1/hospitals/me', {
-        credentials: 'include',
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Hospital info error:', response.status, errorData)
-
-        if (response.status === 401) {
-          router.push('/hospital/login')
-          return
-        }
-        if (response.status === 403) {
-          setError(`Access forbidden. Debug info: ${JSON.stringify(errorData)}`)
-          return
-        }
-        throw new Error('Failed to load hospital information')
-      }
-
-      const data = await response.json()
+      const data = await api.getHospitalStatus()
       setHospital(data.hospital)
-      console.log(data)
     } catch (err: any) {
+      if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+        router.push('/hospital/login')
+        return
+      }
       setError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleLogout = () => {
-    fetch('http://localhost:8080/api/v1/auth/hospital/logout', {
-      method: 'POST',
-      credentials: 'include',
-    }).finally(() => {
-      router.push('/hospital/login')
-    })
+  const handleLogout = async () => {
+    try {
+      await api.hospitalLogout()
+    } catch (e) {
+      // ignore
+    }
+    router.push('/hospital/login')
   }
 
   const copyToClipboard = (text: string, field: string) => {
@@ -118,37 +103,11 @@ export default function HospitalDashboardPage() {
     setGenerateError('')
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/hospitals/me/generate-credentials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ password }),
-      })
-
-      const responseText = await response.text()
-      console.log('Response status:', response.status)
-      console.log('Response text:', responseText)
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to generate credentials'
-        try {
-          const data = JSON.parse(responseText)
-          errorMessage = data.error || errorMessage
-        } catch (e) {
-          console.error('Failed to parse error response:', e)
-          errorMessage = responseText || errorMessage
-        }
-        throw new Error(errorMessage)
-      }
-
-      const data = JSON.parse(responseText)
-      console.log('Parsed data:', data)
-
+      const data = await api.generateCredentials(password)
       setNewCredentials({
         client_id: data.client_id,
         client_secret: data.client_secret,
       })
-
       await loadHospitalInfo()
       setPassword('')
     } catch (err: any) {

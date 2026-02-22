@@ -1,5 +1,6 @@
 // Use backend URL directly since Next.js rewrites don't work in dev mode
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api/v1'
+// NOTE FOR CLAUDE: THERE IS hospital too besides dashboard
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080/api/v1'
 
 export interface LoginResponse {
   token: string
@@ -65,13 +66,14 @@ class APIClient {
   private getHeaders(): HeadersInit {
     return {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
     }
   }
 
   async adminLogin(username: string, password: string): Promise<LoginResponse> {
     const response = await fetch(`${API_BASE}/auth/admin/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true', },
       credentials: 'include', // Include cookies
       body: JSON.stringify({ username, password }),
     })
@@ -82,6 +84,14 @@ class APIClient {
     }
 
     return response.json()
+  }
+
+  async adminLogout(): Promise<void> {
+    await fetch(`${API_BASE}/auth/admin/logout`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
   }
 
   async getPendingRegistrations(): Promise<Hospital[]> {
@@ -198,7 +208,7 @@ class APIClient {
   async hospitalRegister(name: string, email: string, password: string): Promise<{ message: string; hospital: Hospital }> {
     const response = await fetch(`${API_BASE}/hospitals/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
       body: JSON.stringify({ name, email, password }),
     })
 
@@ -213,7 +223,7 @@ class APIClient {
   async hospitalLogin(email: string, password: string): Promise<LoginResponse & { hospital: Hospital }> {
     const response = await fetch(`${API_BASE}/auth/hospital/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true', },
       credentials: 'include', // Include cookies
       body: JSON.stringify({ email, password }),
     })
@@ -226,10 +236,34 @@ class APIClient {
     return response.json()
   }
 
+  async hospitalLogout(): Promise<void> {
+    await fetch(`${API_BASE}/auth/hospital/logout`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
+  }
+
+  async generateCredentials(password: string): Promise<{ client_id: string; client_secret: string }> {
+    const response = await fetch(`${API_BASE}/hospitals/me/generate-credentials`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ password }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to generate credentials')
+    }
+
+    return response.json()
+  }
+
   async getHospitalStatus(): Promise<{ hospital: Hospital; timestamp: string }> {
     const response = await fetch(`${API_BASE}/hospitals/me`, {
       headers: this.getHeaders(),
-      credentials: 'include', // Include cookies
+      credentials: 'include',
     })
 
     if (!response.ok) {

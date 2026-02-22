@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/sidebar'
 import { RefreshCw } from 'lucide-react'
+import { api } from '@/lib/api'
 
 export default function DashboardLayout({
   children,
@@ -20,13 +21,7 @@ export default function DashboardLayout({
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/v1/admin/hospitals', {
-        credentials: 'include'
-      })
-      if (!response.ok) {
-        router.push('/login')
-        return
-      }
+      await api.getAllHospitals()
       setLoading(false)
     } catch (error) {
       router.push('/login')
@@ -35,10 +30,7 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     try {
-      await fetch('http://localhost:8080/api/v1/auth/admin/logout', {
-        method: 'POST',
-        credentials: 'include'
-      })
+      await api.adminLogout()
     } catch (error) {
       console.error('Logout error:', error)
     }

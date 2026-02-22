@@ -2,7 +2,7 @@
 // ALL requests go through central-backend (authenticated)
 // The central-proxy is internal-only and never called from the browser.
 
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080/api/v1'
 
 export interface Requestor {
   id: string
