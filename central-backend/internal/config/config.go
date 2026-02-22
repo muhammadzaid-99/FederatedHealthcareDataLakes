@@ -105,7 +105,7 @@ func Load() (*Config, error) {
 			Format: getEnv("LOG_FORMAT", "json"),
 		},
 		Proxy: ProxyConfig{
-			Endpoint:       getEnv("PROXY_URL", "http://central-proxy:8081"),
+			Endpoint:       getEnv("PROXY_URL", "http://localhost:8081"),
 			InternalAPIKey: getEnv("PROXY_INTERNAL_API_KEY", "dev-internal-api-key-change-in-production"),
 		},
 	}

@@ -56,7 +56,7 @@ func (s *CredentialService) GetCredentialsByNamespaceAndAccessKey(namespace stri
 
 	// Find the SPECIFIC approved response matching both hospital AND access_key_id
 	var response models.NodeAccessResponse
-	err = s.db.Where("hospital_id = ? AND status = ? AND access_key_id = ?",
+	err = s.db.Where("hospital_id = ? AND status = ? AND access_key_id = upper(?)",
 		hospital.ID, "APPROVED", accessKeyID).
 		First(&response).Error
 

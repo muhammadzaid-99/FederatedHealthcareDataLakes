@@ -32,8 +32,8 @@ type HospitalSelection struct {
 type QueryPayload struct {
 	Selections []HospitalSelection `json:"selections" binding:"required,min=1"`
 	TableName  string              `json:"table_name" binding:"required"` // e.g. "fhir_data"
-	Columns    []string            `json:"columns"`                      // empty = SELECT *
-	Limit      int                 `json:"limit"`                        // 0 = no limit (capped server-side)
+	Columns    []string            `json:"columns"`                       // empty = SELECT *
+	Limit      int                 `json:"limit"`                         // 0 = no limit (capped server-side)
 }
 
 // QueryResult mirrors the proxy's TrinoService.QueryResult
@@ -162,10 +162,10 @@ func (s *QueryBuilderService) BuildAndExecuteQuery(
 
 		// Date filters (if provided)
 		if dateStart != "" {
-			whereParts = append(whereParts, fmt.Sprintf("date >= DATE '%s'", dateStart))
+			whereParts = append(whereParts, fmt.Sprintf("checkup_date >= DATE '%s'", dateStart))
 		}
 		if dateEnd != "" {
-			whereParts = append(whereParts, fmt.Sprintf("date <= DATE '%s'", dateEnd))
+			whereParts = append(whereParts, fmt.Sprintf("checkup_date <= DATE '%s'", dateEnd))
 		}
 
 		whereClause := strings.Join(whereParts, " AND ")
