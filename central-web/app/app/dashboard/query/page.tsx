@@ -21,7 +21,7 @@ import {
   Zap,
 } from 'lucide-react'
 
-const PROXY_API = 'http://localhost:8081'
+const PROXY_API = process.env.NEXT_PUBLIC_PROXY_API || 'http://localhost:8081'
 
 interface QueryResult {
   columns: string[]

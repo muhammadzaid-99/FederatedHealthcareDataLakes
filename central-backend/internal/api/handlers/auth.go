@@ -19,6 +19,34 @@ func NewAuthHandler(authService *services.AuthService, hospitalService *services
 	}
 }
 
+// isSecureRequest returns true when the request arrived over HTTPS
+// (either directly or proxied through ngrok / a load balancer).
+// Secure=true is required for SameSite=None cookies; on plain HTTP
+// (localhost dev) it must be false or the browser silently drops the cookie.
+func isSecureRequest(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	if c.GetHeader("X-Forwarded-Proto") == "https" {
+		return true
+	}
+	return false
+}
+
+// setCookie sets a cookie with the correct SameSite / Secure attributes
+// depending on whether the current request is HTTPS.
+func setCookie(c *gin.Context, name, value string, maxAge int) {
+	secure := isSecureRequest(c)
+	if secure {
+		// Cross-origin credentialed fetch requires SameSite=None + Secure
+		c.SetSameSite(http.SameSiteNoneMode)
+	} else {
+		// Plain HTTP (local dev) — Lax is fine, Secure must be false
+		c.SetSameSite(http.SameSiteLaxMode)
+	}
+	c.SetCookie(name, value, maxAge, "/", "", secure, true)
+}
+
 // AdminLogin handles admin authentication
 // This is for the Central-Web admin portal - uses secure httpOnly cookies
 func (h *AuthHandler) AdminLogin(c *gin.Context) {
@@ -47,21 +75,8 @@ func (h *AuthHandler) AdminLogin(c *gin.Context) {
 	}
 
 	// Clear any hospital token cookie first (in case user was logged in as hospital)
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie("hospital_token", "", -1, "/", "", true, true)
-
-	// Set admin token in httpOnly cookie
-	// SameSite=None; Secure=true required for cross-origin credentialed requests (ngrok / different domain)
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie(
-		"admin_token", // name
-		token,         // value
-		3600*24*7,     // maxAge (7 days in seconds)
-		"/",           // path
-		"",            // domain
-		true,          // secure (required with SameSite=None)
-		true,          // httpOnly (prevents JavaScript access)
-	)
+	setCookie(c, "hospital_token", "", -1)
+	setCookie(c, "admin_token", token, 3600*24*7)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
@@ -75,17 +90,7 @@ func (h *AuthHandler) AdminLogin(c *gin.Context) {
 
 // AdminLogout handles admin logout
 func (h *AuthHandler) AdminLogout(c *gin.Context) {
-	// Clear the cookie
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie(
-		"admin_token",
-		"",
-		-1, // maxAge -1 deletes the cookie
-		"/",
-		"",
-		true,
-		true,
-	)
+	setCookie(c, "admin_token", "", -1)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Logout successful",
@@ -94,17 +99,7 @@ func (h *AuthHandler) AdminLogout(c *gin.Context) {
 
 // HospitalLogout handles hospital logout
 func (h *AuthHandler) HospitalLogout(c *gin.Context) {
-	// Clear the cookie
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie(
-		"hospital_token",
-		"",
-		-1, // maxAge -1 deletes the cookie
-		"/",
-		"",
-		true,
-		true,
-	)
+	setCookie(c, "hospital_token", "", -1)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Logout successful",
@@ -139,21 +134,8 @@ func (h *AuthHandler) HospitalLogin(c *gin.Context) {
 	}
 
 	// Clear any admin token cookie first (in case user was logged in as admin)
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie("admin_token", "", -1, "/", "", true, true)
-
-	// Set hospital token in httpOnly cookie
-	// SameSite=None; Secure=true required for cross-origin credentialed requests
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie(
-		"hospital_token", // name
-		token,            // value
-		3600*24*7,        // maxAge (7 days in seconds)
-		"/",              // path
-		"",               // domain
-		true,             // secure (required with SameSite=None)
-		true,             // httpOnly (prevents JavaScript access)
-	)
+	setCookie(c, "admin_token", "", -1)
+	setCookie(c, "hospital_token", token, 3600*24*7)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
@@ -265,22 +247,9 @@ func (h *AuthHandler) RequestorLogin(c *gin.Context) {
 	}
 
 	// Clear any other token cookies first
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie("admin_token", "", -1, "/", "", true, true)
-	c.SetCookie("hospital_token", "", -1, "/", "", true, true)
-
-	// Set requestor token in httpOnly cookie
-	// SameSite=None; Secure=true required for cross-origin credentialed requests (ngrok / different domain)
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie(
-		"requestor_token", // name
-		token,             // value
-		3600*24*7,         // maxAge (7 days in seconds)
-		"/",               // path
-		"",                // domain
-		true,              // secure (required with SameSite=None)
-		true,              // httpOnly
-	)
+	setCookie(c, "admin_token", "", -1)
+	setCookie(c, "hospital_token", "", -1)
+	setCookie(c, "requestor_token", token, 3600*24*7)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
@@ -296,17 +265,7 @@ func (h *AuthHandler) RequestorLogin(c *gin.Context) {
 
 // RequestorLogout handles requestor logout
 func (h *AuthHandler) RequestorLogout(c *gin.Context) {
-	// Clear the cookie
-	c.SetSameSite(http.SameSiteNoneMode)
-	c.SetCookie(
-		"requestor_token",
-		"",
-		-1, // maxAge -1 deletes the cookie
-		"/",
-		"",
-		true,
-		true,
-	)
+	setCookie(c, "requestor_token", "", -1)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Logout successful",

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { api } from '@/lib/api'
 import {
   Shield,
   Building2,
@@ -49,23 +50,8 @@ export default function HospitalRegisterPage() {
     setSubmitting(true)
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/hospitals/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Registration failed')
-      }
-
+      await api.hospitalRegister(formData.name, formData.email, formData.password)
       setSuccess(true)
-
       setTimeout(() => {
         router.push('/hospital/login')
       }, 2000)
