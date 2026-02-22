@@ -1,324 +1,420 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, RefreshCw, Eye, CheckCircle, XCircle, Clock, PlayCircle } from "lucide-react";
-import { api } from "@/lib/api";
+import { useEffect, useState, useCallback } from 'react';
+import { DashboardShell } from '@/components/dashboard-shell';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Eye, Loader2, RefreshCw, X, Terminal } from 'lucide-react';
+import { api } from '@/lib/api';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
 interface ETLJob {
   id: string;
-  config_id: string;
-  start_time: string;
-  end_time?: string;
-  date_range_start: string;
-  date_range_end: string;
   status: string;
   stage: string;
-  message: string;
+  start_time: string;
+  end_time?: string;
   records_extracted: number;
   records_validated: number;
   records_failed: number;
-  staging_path: string;
-  normalized_path: string;
-  validated_path: string;
-  logs: string;
-  created_at: string;
+  staging_path?: string;
+  normalized_path?: string;
+  validated_path?: string;
+  message?: string;
+  logs?: string;
+  date_range_start?: string;
+  date_range_end?: string;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function getStatusBadge(status: string) {
+  switch (status.toLowerCase()) {
+    case 'completed':
+      return (
+        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200">
+          Completed
+        </Badge>
+      );
+    case 'running':
+      return (
+        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 animate-pulse">
+          Running
+        </Badge>
+      );
+    case 'failed':
+      return (
+        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-200 border-rose-200">
+          Failed
+        </Badge>
+      );
+    default:
+      return (
+        <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200">
+          {status}
+        </Badge>
+      );
+  }
+}
+
+function formatDateTime(str?: string): string {
+  if (!str) return 'N/A';
+  try {
+    return new Date(str).toLocaleString();
+  } catch {
+    return 'N/A';
+  }
+}
+
+function formatDuration(start?: string, end?: string): string {
+  if (!start) return 'N/A';
+  if (!end) return 'In progress…';
+  try {
+    const seconds = Math.round(
+      (new Date(end).getTime() - new Date(start).getTime()) / 1000,
+    );
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  } catch {
+    return 'N/A';
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page Component                                                     */
+/* ------------------------------------------------------------------ */
 
 export default function ETLJobsPage() {
   const [jobs, setJobs] = useState<ETLJob[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<ETLJob | null>(null);
-  const [total, setTotal] = useState(0);
-  const [limit] = useState(5);
-  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(10);
+  const [selectedJob, setSelectedJob] = useState<ETLJob | null>(null);
 
-  useEffect(() => {
-    loadJobs();
-    const interval = setInterval(loadJobs, 1000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
-  }, [offset]);
+  /* ---------- data fetching ---------- */
 
-  const loadJobs = async () => {
+  const loadJobs = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get(`/etl/jobs?limit=${limit}&offset=${offset}`);
-      console.log("Jobs response:", response);
-      setJobs(response.jobs || []);
-      setTotal(response.total || 0);
-    } catch (error: any) {
-      console.error("Failed to load jobs:", error);
-      setError(error.message || "Failed to load jobs");
+      const res = await api.get(`/etl/jobs?offset=${offset}&limit=${limit}`);
+      setJobs(res.jobs ?? []);
+      setTotal(res.total ?? 0);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to load ETL jobs';
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  };
+  }, [offset, limit]);
 
-  const loadJobDetails = async (jobId: string) => {
+  const loadJobDetails = useCallback(async (id: string) => {
     try {
-      const response = await api.get(`/etl/jobs/${jobId}`);
-      console.log(response)
-      setSelectedJob(response.job);
-    } catch (error) {
-      console.error("Failed to load job details:", error);
+      const res = await api.get(`/etl/jobs/${id}`);
+      setSelectedJob(res);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to load job details';
+      setError(msg);
     }
-  };
+  }, []);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" /> Completed</Badge>;
-      case "running":
-        return <Badge className="bg-blue-500"><PlayCircle className="w-3 h-3 mr-1" /> Running</Badge>;
-      case "failed":
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Failed</Badge>;
-      case "pending":
-        return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+  useEffect(() => {
+    loadJobs();
+  }, [loadJobs]);
 
-  const formatDuration = (start: string, end?: string) => {
-    const startTime = new Date(start).getTime();
-    const endTime = end ? new Date(end).getTime() : Date.now();
-    const duration = Math.floor((endTime - startTime) / 1000);
-    const minutes = Math.floor(duration / 60);
-    const seconds = duration % 60;
-    return `${minutes}m ${seconds}s`;
-  };
+  /* ---------- pagination helpers ---------- */
 
-  const formatDateTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString();
-  };
+  const totalPages = Math.ceil(total / limit);
+  const currentPage = Math.floor(offset / limit) + 1;
+
+  /* ---------- actions (header) ---------- */
+
+  const RefreshButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => loadJobs()}
+      disabled={loading}
+      className="gap-2"
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <RefreshCw className="h-4 w-4" />
+      )}
+      Refresh
+    </Button>
+  );
+
+  /* ---------------------------------------------------------------- */
+  /*  Render                                                           */
+  /* ---------------------------------------------------------------- */
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">ETL Jobs</h1>
-          <p className="text-muted-foreground">Monitor and manage ETL job executions</p>
+    <DashboardShell
+      title="ETL Jobs"
+      description="Monitor and manage ETL job executions"
+      actions={RefreshButton}
+    >
+      {/* error banner */}
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {error}
         </div>
-        <Button onClick={loadJobs} disabled={loading} variant="outline">
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
+      )}
 
-      {/* Job List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Jobs</CardTitle>
-          <CardDescription>
-            Showing {jobs.length} of {total} jobs
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <div className="text-center py-8">
-              <p className="text-red-600 mb-4">{error}</p>
-              <Button onClick={loadJobs} variant="outline">Try Again</Button>
-            </div>
-          ) : loading && jobs.length === 0 ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin" />
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No ETL jobs found. Run your first job from the configuration page.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
+      {/* ---- jobs table ---- */}
+      {!loading && jobs.length === 0 && !error ? (
+        /* empty state */
+        <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-12 text-center">
+          <Terminal className="mx-auto h-10 w-10 text-slate-400" />
+          <h3 className="mt-4 text-lg font-semibold text-slate-700">
+            No ETL jobs found
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Run your first ETL job to see executions here.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-slate-200 bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Start Time</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Records</TableHead>
+                <TableHead>Date Range</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
                 <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Start Time</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Records</TableHead>
-                  <TableHead>Date Range</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableCell colSpan={7} className="h-32 text-center">
+                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-blue-500" />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {jobs.map((job) => (
-                  <TableRow key={job.id}>
+              ) : (
+                jobs.map((job) => (
+                  <TableRow key={job.id} className="hover:bg-slate-50/60">
                     <TableCell>{getStatusBadge(job.status)}</TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">{job.stage}</span>
+                    <TableCell className="font-medium">{job.stage}</TableCell>
+                    <TableCell className="text-sm text-slate-600">
+                      {formatDateTime(job.start_time)}
                     </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{formatDateTime(job.start_time)}</span>
+                    <TableCell className="text-sm text-slate-600">
+                      {formatDuration(job.start_time, job.end_time)}
                     </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{formatDuration(job.start_time, job.end_time)}</span>
+                    <TableCell className="text-sm">
+                      <span className="text-emerald-600">
+                        {job.records_extracted}
+                      </span>
+                      {' / '}
+                      <span className="text-blue-600">
+                        {job.records_validated}
+                      </span>
+                      {' / '}
+                      <span className="text-rose-600">
+                        {job.records_failed}
+                      </span>
                     </TableCell>
-                    <TableCell>
-                      <div className="text-sm space-y-1">
-                        {job.records_extracted > 0 && (
-                          <div>Extracted: {job.records_extracted}</div>
-                        )}
-                        {job.records_validated > 0 && (
-                          <div className="text-green-600">Validated: {job.records_validated}</div>
-                        )}
-                        {job.records_failed > 0 && (
-                          <div className="text-red-600">Failed: {job.records_failed}</div>
-                        )}
-                      </div>
+                    <TableCell className="text-sm text-slate-600">
+                      {job.date_range_start && job.date_range_end
+                        ? `${formatDateTime(job.date_range_start)} – ${formatDateTime(job.date_range_end)}`
+                        : '—'}
                     </TableCell>
-                    <TableCell>
-                      <div className="text-xs text-muted-foreground">
-                        <div>{formatDateTime(job.date_range_start)}</div>
-                        <div>to {formatDateTime(job.date_range_end)}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right">
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => loadJobDetails(job.id)}
+                        className="text-blue-600 hover:text-blue-800"
                       >
-                        <Eye className="w-4 h-4" />
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                ))
+              )}
+            </TableBody>
+          </Table>
 
-          {/* Pagination */}
-          {total > limit && (
-            <div className="flex justify-between items-center mt-4">
-              <Button
-                variant="outline"
-                onClick={() => setOffset(Math.max(0, offset - limit))}
-                disabled={offset === 0}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {Math.floor(offset / limit) + 1} of {Math.ceil(total / limit)}
+          {/* pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
+              <span>
+                Page {currentPage} of {totalPages} ({total} jobs)
               </span>
-              <Button
-                variant="outline"
-                onClick={() => setOffset(offset + limit)}
-                disabled={offset + limit >= total}
-              >
-                Next
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={offset === 0}
+                  onClick={() => setOffset((o) => Math.max(0, o - limit))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={offset + limit >= total}
+                  onClick={() => setOffset((o) => o + limit)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Job Details Modal */}
-      {selectedJob && (
-        <Card className="border-2">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Job Details</CardTitle>
-              <div className="flex gap-2 items-center">
-                <Button variant="outline" size="sm" onClick={() => loadJobDetails(selectedJob.id)}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedJob(null)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Job ID</p>
-                <p className="text-sm font-mono">{selectedJob.id}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Status</p>
-                {getStatusBadge(selectedJob.status)}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Stage</p>
-                <p className="text-sm">{selectedJob.stage}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Duration</p>
-                <p className="text-sm">{formatDuration(selectedJob.start_time, selectedJob.end_time)}</p>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">Processing Statistics</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="border rounded p-3">
-                  <p className="text-xs text-muted-foreground">Extracted</p>
-                  <p className="text-2xl font-bold">{selectedJob.records_extracted}</p>
-                </div>
-                <div className="border rounded p-3">
-                  <p className="text-xs text-muted-foreground">Validated</p>
-                  <p className="text-2xl font-bold text-green-600">{selectedJob.records_validated}</p>
-                </div>
-                <div className="border rounded p-3">
-                  <p className="text-xs text-muted-foreground">Failed</p>
-                  <p className="text-2xl font-bold text-red-600">{selectedJob.records_failed}</p>
-                </div>
-              </div>
-            </div>
-
-            {selectedJob.message && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Message</p>
-                <p className="text-sm mt-1 p-2 bg-muted rounded overflow-auto max-h-96 whitespace-pre-wrap">{selectedJob.message}</p>
-              </div>
-            )}
-
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">File Paths</p>
-              <div className="space-y-2 text-xs">
-                {selectedJob.staging_path && (
-                  <div>
-                    <span className="font-medium">Staging:</span>{" "}
-                    <span className="font-mono text-muted-foreground">{selectedJob.staging_path}</span>
-                  </div>
-                )}
-                {selectedJob.normalized_path && (
-                  <div>
-                    <span className="font-medium">Normalized:</span>{" "}
-                    <span className="font-mono text-muted-foreground">{selectedJob.normalized_path}</span>
-                  </div>
-                )}
-                {selectedJob.validated_path && (
-                  <div>
-                    <span className="font-medium">Validated:</span>{" "}
-                    <span className="font-mono text-muted-foreground">{selectedJob.validated_path}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {selectedJob.logs && selectedJob.logs.trim() !== "" && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Execution Logs</p>
-                <div className="bg-gray-900 text-green-400 p-4 rounded font-mono text-xs overflow-auto max-h-96 whitespace-pre-wrap">
-                  {selectedJob.logs}
-                </div>
-              </div>
-            )}
-
-
-          </CardContent>
-        </Card>
+        </div>
       )}
-    </div>
+
+      {/* ---- selected job details ---- */}
+      {selectedJob && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-6">
+          {/* header */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-800">
+              Job Details
+            </h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSelectedJob(null)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* 2×2 overview grid */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[
+              { label: 'ID', value: selectedJob.id },
+              { label: 'Status', value: selectedJob.status, badge: true },
+              { label: 'Stage', value: selectedJob.stage },
+              {
+                label: 'Duration',
+                value: formatDuration(
+                  selectedJob.start_time,
+                  selectedJob.end_time,
+                ),
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+              >
+                <p className="text-xs text-slate-500">{item.label}</p>
+                {item.badge ? (
+                  <div className="mt-1">{getStatusBadge(item.value)}</div>
+                ) : (
+                  <p className="mt-1 text-sm font-medium text-slate-800 break-all">
+                    {item.value}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* 3-col stats */}
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              {
+                label: 'Extracted',
+                value: selectedJob.records_extracted,
+                color: 'text-teal-600',
+              },
+              {
+                label: 'Validated',
+                value: selectedJob.records_validated,
+                color: 'text-blue-600',
+              },
+              {
+                label: 'Failed',
+                value: selectedJob.records_failed,
+                color: 'text-rose-600',
+              },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center"
+              >
+                <p className="text-xs text-slate-500">{stat.label}</p>
+                <p className={`mt-1 text-2xl font-bold ${stat.color}`}>
+                  {stat.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* message */}
+          {selectedJob.message && (
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500 mb-1">
+                Message
+              </p>
+              <p className="text-sm text-slate-700">{selectedJob.message}</p>
+            </div>
+          )}
+
+          {/* file paths */}
+          {(selectedJob.staging_path ||
+            selectedJob.normalized_path ||
+            selectedJob.validated_path) && (
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-2">
+              <p className="text-xs font-medium text-slate-500 mb-2">
+                File Paths
+              </p>
+              {[
+                { label: 'Staging', path: selectedJob.staging_path },
+                { label: 'Normalized', path: selectedJob.normalized_path },
+                { label: 'Validated', path: selectedJob.validated_path },
+              ]
+                .filter((f) => f.path)
+                .map((f) => (
+                  <div key={f.label} className="flex gap-2 text-sm">
+                    <span className="text-slate-500 min-w-[90px]">
+                      {f.label}:
+                    </span>
+                    <span className="font-mono text-slate-700 break-all">
+                      {f.path}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* logs */}
+          {selectedJob.logs && (
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-2">Logs</p>
+              <pre className="bg-slate-900 rounded-xl p-4 text-emerald-400 font-mono text-xs max-h-80 overflow-auto whitespace-pre-wrap">
+                {selectedJob.logs}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </DashboardShell>
   );
 }

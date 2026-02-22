@@ -47,19 +47,19 @@ func (h *AuthHandler) AdminLogin(c *gin.Context) {
 	}
 
 	// Clear any hospital token cookie first (in case user was logged in as hospital)
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("hospital_token", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteNoneMode)
+	c.SetCookie("hospital_token", "", -1, "/", "", true, true)
 
-	// Set admin token in httpOnly cookie (secure for central-web)
-	// Note: For localhost cross-origin, SameSite=Lax works. For production HTTPS use SameSite=None with Secure=true
-	c.SetSameSite(http.SameSiteLaxMode)
+	// Set admin token in httpOnly cookie
+	// SameSite=None; Secure=true required for cross-origin credentialed requests (ngrok / different domain)
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie(
 		"admin_token", // name
 		token,         // value
 		3600*24*7,     // maxAge (7 days in seconds)
 		"/",           // path
-		"",            // domain - empty for same-site across ports
-		false,         // secure (set true in production with HTTPS)
+		"",            // domain
+		true,          // secure (required with SameSite=None)
 		true,          // httpOnly (prevents JavaScript access)
 	)
 
@@ -76,14 +76,14 @@ func (h *AuthHandler) AdminLogin(c *gin.Context) {
 // AdminLogout handles admin logout
 func (h *AuthHandler) AdminLogout(c *gin.Context) {
 	// Clear the cookie
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie(
 		"admin_token",
 		"",
 		-1, // maxAge -1 deletes the cookie
 		"/",
 		"",
-		false,
+		true,
 		true,
 	)
 
@@ -95,14 +95,14 @@ func (h *AuthHandler) AdminLogout(c *gin.Context) {
 // HospitalLogout handles hospital logout
 func (h *AuthHandler) HospitalLogout(c *gin.Context) {
 	// Clear the cookie
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie(
 		"hospital_token",
 		"",
 		-1, // maxAge -1 deletes the cookie
 		"/",
 		"",
-		false,
+		true,
 		true,
 	)
 
@@ -139,18 +139,19 @@ func (h *AuthHandler) HospitalLogin(c *gin.Context) {
 	}
 
 	// Clear any admin token cookie first (in case user was logged in as admin)
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("admin_token", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteNoneMode)
+	c.SetCookie("admin_token", "", -1, "/", "", true, true)
 
-	// Set hospital token in httpOnly cookie (secure for central-web)
-	c.SetSameSite(http.SameSiteLaxMode)
+	// Set hospital token in httpOnly cookie
+	// SameSite=None; Secure=true required for cross-origin credentialed requests
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie(
 		"hospital_token", // name
 		token,            // value
 		3600*24*7,        // maxAge (7 days in seconds)
 		"/",              // path
-		"",               // domain - empty for same-site across ports
-		false,            // secure (set true in production with HTTPS)
+		"",               // domain
+		true,             // secure (required with SameSite=None)
 		true,             // httpOnly (prevents JavaScript access)
 	)
 
@@ -264,19 +265,20 @@ func (h *AuthHandler) RequestorLogin(c *gin.Context) {
 	}
 
 	// Clear any other token cookies first
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("admin_token", "", -1, "/", "", false, true)
-	c.SetCookie("hospital_token", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteNoneMode)
+	c.SetCookie("admin_token", "", -1, "/", "", true, true)
+	c.SetCookie("hospital_token", "", -1, "/", "", true, true)
 
 	// Set requestor token in httpOnly cookie
-	c.SetSameSite(http.SameSiteLaxMode)
+	// SameSite=None; Secure=true required for cross-origin credentialed requests (ngrok / different domain)
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie(
 		"requestor_token", // name
 		token,             // value
 		3600*24*7,         // maxAge (7 days in seconds)
 		"/",               // path
 		"",                // domain
-		false,             // secure (set true in production with HTTPS)
+		true,              // secure (required with SameSite=None)
 		true,              // httpOnly
 	)
 
@@ -295,14 +297,14 @@ func (h *AuthHandler) RequestorLogin(c *gin.Context) {
 // RequestorLogout handles requestor logout
 func (h *AuthHandler) RequestorLogout(c *gin.Context) {
 	// Clear the cookie
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie(
 		"requestor_token",
 		"",
 		-1, // maxAge -1 deletes the cookie
 		"/",
 		"",
-		false,
+		true,
 		true,
 	)
 

@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, storage } from '@/lib/api';
+import { DashboardShell } from '@/components/dashboard-shell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, CheckCircle2, Loader2, Radio, Server, AlertCircle, Settings } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, CheckCircle2, AlertCircle, Server, Radio, Settings } from 'lucide-react';
+import { api, storage } from '@/lib/api';
 
 export default function HandshakePage() {
   const router = useRouter();
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState(1); // 1: Save Config, 2: Handshake
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -24,43 +24,32 @@ export default function HandshakePage() {
     nessie_namespace: '',
   });
 
-  useEffect(() => {
-    const token = storage.getToken();
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-    loadNodeStatus();
-  }, [router]);
-
   const loadNodeStatus = async () => {
-    const token = storage.getToken();
-    if (!token) return;
-
     try {
-      const response = await api.getNodeStatus(token);
-      setNodeConfig(response.config);
-      
-      // If config exists, populate form but allow editing
-      if (response.config && response.config.client_id) {
+      setLoading(true);
+      setError('');
+      const token = storage.getToken();
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+      const config = await api.getNodeStatus(token);
+      if (config && config.handshake_done) {
+        setNodeConfig(config);
         setFormData({
-          client_id: response.config.client_id,
-          client_secret: '', // Always require re-entering secret
-          queue_name: response.config.queue_name || '',
-          nessie_namespace: response.config.nessie_namespace || '',
+          client_id: config.client_id || '',
+          client_secret: config.client_secret || '',
+          queue_name: config.queue_name || '',
+          nessie_namespace: config.nessie_namespace || '',
         });
-        
-        // Show current step based on handshake status, but allow going back to step 1
-        if (response.config.handshake_done) {
-          setStep(3); // Already completed, but user can still edit
-        } else {
-          setStep(2); // Ready for handshake
-        }
+        setStep(3);
       }
     } catch (err: any) {
-      // If node not configured yet, that's fine - start at step 1
-      if (!err.message.includes('node not configured yet') && !err.message.includes('404')) {
-        setError(err.message);
+      const msg = err?.message || '';
+      if (msg.includes('node not configured') || msg.includes('404')) {
+        setStep(1);
+      } else {
+        setError(msg);
       }
     } finally {
       setLoading(false);
@@ -69,320 +58,350 @@ export default function HandshakePage() {
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProcessing(true);
-    setError('');
-    setSuccess('');
-
-    const token = storage.getToken();
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-
     try {
-      await api.saveConfig(token, {
-        client_id: formData.client_id,
-        client_secret: formData.client_secret,
-        queue_name: formData.queue_name,
-        nessie_namespace: formData.nessie_namespace,
-      });
-
-      setSuccess('Configuration saved successfully!');
+      setProcessing(true);
+      setError('');
+      setSuccess('');
+      const token = storage.getToken();
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+      const response = await api.saveConfig(token, formData);
+      setNodeConfig(response);
       setStep(2);
-      await loadNodeStatus();
+      setSuccess('Configuration saved successfully.');
     } catch (err: any) {
-      setError(err.message || 'Failed to save configuration');
+      setError(err?.message || 'Failed to save configuration');
     } finally {
       setProcessing(false);
     }
   };
 
   const handleHandshake = async () => {
-    setProcessing(true);
-    setError('');
-    setSuccess('');
-
-    const token = storage.getToken();
-    if (!token) {
-      router.push('/login');
-      return;
-    }
-
     try {
-      const response = await api.handshake(token);
-      setSuccess('Handshake completed successfully! RabbitMQ listener started.');
+      setProcessing(true);
+      setError('');
+      setSuccess('');
+      const token = storage.getToken();
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+      await api.handshake(token);
+      setSuccess('Handshake completed successfully! Your node is now connected to the central control plane.');
       setStep(3);
       await loadNodeStatus();
     } catch (err: any) {
-      setError(err.message || 'Handshake failed');
+      setError(err?.message || 'Handshake failed');
     } finally {
       setProcessing(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading node configuration...</p>
+  useEffect(() => {
+    loadNodeStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stepLabels = ['Save Config', 'Handshake', 'Complete'];
+  const stepIcons = [Settings, Radio, Server];
+
+  const renderProgressSteps = () => (
+    <div className="flex items-center justify-center mb-10">
+      {stepLabels.map((label, idx) => {
+        const stepNum = idx + 1;
+        const isCompleted = step > stepNum;
+        const isActive = step === stepNum;
+        const isFinal = stepNum === 3 && isCompleted;
+        const Icon = stepIcons[idx];
+
+        return (
+          <div key={label} className="flex items-center">
+            <div className="flex flex-col items-center">
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition-all duration-300 ${
+                  isFinal || (stepNum === 3 && isActive)
+                    ? 'bg-emerald-600 text-white'
+                    : isCompleted || isActive
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-200 text-slate-500'
+                }`}
+              >
+                {isCompleted ? (
+                  <CheckCircle2 className="h-5 w-5" />
+                ) : (
+                  <Icon className="h-5 w-5" />
+                )}
+              </div>
+              <span
+                className={`mt-2 text-xs font-medium ${
+                  isCompleted || isActive ? 'text-slate-800' : 'text-slate-400'
+                }`}
+              >
+                {label}
+              </span>
+            </div>
+            {idx < stepLabels.length - 1 && (
+              <div
+                className={`h-1 w-20 mx-2 rounded-full transition-all duration-300 ${
+                  step > stepNum ? 'bg-blue-600' : 'bg-slate-200'
+                }`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderError = () =>
+    error ? (
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+        <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+        <div>
+          <p className="text-sm font-medium text-red-800">Error</p>
+          <p className="text-sm text-red-600">{error}</p>
         </div>
       </div>
-    );
-  }
+    ) : null;
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
+  const renderSuccess = () =>
+    success ? (
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-500" />
+        <div>
+          <p className="text-sm font-medium text-emerald-800">Success</p>
+          <p className="text-sm text-emerald-600">{success}</p>
+        </div>
+      </div>
+    ) : null;
+
+  const renderStep1 = () => (
+    <div className="rounded-2xl border border-slate-200 bg-white p-8">
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-slate-800">Save Configuration</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Enter the credentials provided by the central control plane admin.
+        </p>
+      </div>
+      <form onSubmit={handleSaveConfig} className="space-y-5">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            Client ID <span className="text-red-500">*</span>
+          </label>
+          <Input
+            value={formData.client_id}
+            onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+            placeholder="Enter client ID"
+            required
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            Client Secret <span className="text-red-500">*</span>
+          </label>
+          <Input
+            type="password"
+            value={formData.client_secret}
+            onChange={(e) => setFormData({ ...formData, client_secret: e.target.value })}
+            placeholder="Enter client secret"
+            required
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            Queue Name <span className="text-red-500">*</span>
+          </label>
+          <Input
+            value={formData.queue_name}
+            onChange={(e) => setFormData({ ...formData, queue_name: e.target.value })}
+            placeholder="hospital_queue_001"
+            required
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            Nessie Namespace <span className="text-red-500">*</span>
+          </label>
+          <Input
+            value={formData.nessie_namespace}
+            onChange={(e) => setFormData({ ...formData, nessie_namespace: e.target.value })}
+            placeholder="hospital_001"
+            required
+          />
+        </div>
         <Button
-          variant="ghost"
-          onClick={() => router.push('/dashboard')}
-          className="mb-6"
+          type="submit"
+          disabled={processing}
+          className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-700 hover:to-cyan-700"
         >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
+          {processing ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            'Save Configuration'
+          )}
         </Button>
+      </form>
+    </div>
+  );
 
-        <div className="max-w-2xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Node Configuration</h1>
-            <p className="text-gray-600">
-              Configure your hospital node with credentials from the central control plane
-            </p>
+  const renderStep2 = () => (
+    <div className="rounded-2xl border border-slate-200 bg-white p-8">
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-slate-800">Initiate Handshake</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Your configuration has been saved. Initiate the handshake to connect with the central control plane.
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <h3 className="mb-3 text-sm font-semibold text-blue-800">Saved Configuration</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-blue-600">Client ID</span>
+            <span className="font-medium text-blue-900">{formData.client_id}</span>
           </div>
-
-          {/* Progress Steps */}
-          <div className="flex items-center justify-center mb-8">
-            <div className="flex items-center">
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                {step > 1 ? <CheckCircle2 className="h-6 w-6" /> : '1'}
-              </div>
-              <div className={`w-24 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                {step > 2 ? <CheckCircle2 className="h-6 w-6" /> : '2'}
-              </div>
-              <div className={`w-24 h-1 ${step >= 3 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full ${step >= 3 ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'}`}>
-                {step >= 3 ? <CheckCircle2 className="h-6 w-6" /> : '3'}
-              </div>
-            </div>
+          <div className="flex justify-between">
+            <span className="text-blue-600">Queue Name</span>
+            <span className="font-medium text-blue-900">{formData.queue_name}</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-blue-600">Nessie Namespace</span>
+            <span className="font-medium text-blue-900">{formData.nessie_namespace}</span>
+          </div>
+        </div>
+      </div>
 
-          {/* Error/Success Messages */}
-          {error && (
-            <Card className="mb-6 border-red-200 bg-red-50">
-              <CardContent className="pt-6">
-                <div className="flex items-start">
-                  <AlertCircle className="h-5 w-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      <p className="mb-6 text-sm text-slate-600">
+        The handshake process will authenticate your node with the central server, register your queue,
+        and establish a secure connection for data exchange.
+      </p>
 
-          {success && (
-            <Card className="mb-6 border-green-200 bg-green-50">
-              <CardContent className="pt-6">
-                <div className="flex items-start">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 mr-3 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-green-700">{success}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      <Button
+        onClick={handleHandshake}
+        disabled={processing}
+        className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-700 hover:to-cyan-700"
+      >
+        {processing ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Performing Handshake...
+          </>
+        ) : (
+          <>
+            <Radio className="mr-2 h-4 w-4" />
+            Initiate Handshake
+          </>
+        )}
+      </Button>
+    </div>
+  );
 
-          {/* Step 1: Save Configuration */}
-          {step === 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Server className="h-5 w-5 mr-2 text-blue-600" />
-                  Step 1: Save Node Configuration
-                </CardTitle>
-                <CardDescription>
-                  Enter the credentials provided by the central control plane
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSaveConfig} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Client ID
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="Enter client ID"
-                      value={formData.client_id}
-                      onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
-                      required
-                    />
-                  </div>
+  const renderStep3 = () => (
+    <div className="rounded-2xl border border-emerald-200 bg-white p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-800">Node Connected</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Your hospital node is successfully connected to the central control plane.
+          </p>
+        </div>
+        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Connected</Badge>
+      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Client Secret
-                    </label>
-                    <Input
-                      type="password"
-                      placeholder="Enter client secret"
-                      value={formData.client_secret}
-                      onChange={(e) => setFormData({ ...formData, client_secret: e.target.value })}
-                      required
-                    />
-                  </div>
+      <div className="mb-6 rounded-xl bg-emerald-50 p-4">
+        <div className="divide-y divide-emerald-200">
+          <div className="flex justify-between py-3 first:pt-0">
+            <span className="text-sm text-emerald-600">Client ID</span>
+            <span className="text-sm font-medium text-emerald-900">{nodeConfig?.client_id || formData.client_id}</span>
+          </div>
+          <div className="flex justify-between py-3">
+            <span className="text-sm text-emerald-600">Queue</span>
+            <span className="text-sm font-medium text-emerald-900">{nodeConfig?.queue_name || formData.queue_name}</span>
+          </div>
+          <div className="flex justify-between py-3">
+            <span className="text-sm text-emerald-600">Namespace</span>
+            <span className="text-sm font-medium text-emerald-900">{nodeConfig?.nessie_namespace || formData.nessie_namespace}</span>
+          </div>
+          <div className="flex justify-between py-3 last:pb-0">
+            <span className="text-sm text-emerald-600">Status</span>
+            <span className="text-sm font-semibold text-emerald-700">Connected</span>
+          </div>
+        </div>
+      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Queue Name
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., hospital_queue_001"
-                      value={formData.queue_name}
-                      onChange={(e) => setFormData({ ...formData, queue_name: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nessie Namespace
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., hospital_001"
-                      value={formData.nessie_namespace}
-                      onChange={(e) => setFormData({ ...formData, nessie_namespace: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={processing}>
-                    {processing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      'Save Configuration'
-                    )}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 2: Initiate Handshake */}
-          {step === 2 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Radio className="h-5 w-5 mr-2 text-blue-600" />
-                  Step 2: Initiate Handshake
-                </CardTitle>
-                <CardDescription>
-                  Connect with the central control plane and start RabbitMQ listener
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-sm text-blue-900 mb-2">Configuration Saved</h4>
-                  <div className="space-y-1 text-sm text-blue-700">
-                    <p><strong>Client ID:</strong> {nodeConfig?.client_id || formData.client_id}</p>
-                    <p><strong>Queue:</strong> {nodeConfig?.queue_name || formData.queue_name}</p>
-                    <p><strong>Namespace:</strong> {nodeConfig?.nessie_namespace || formData.nessie_namespace}</p>
-                  </div>
-                </div>
-
-                <p className="text-sm text-gray-600">
-                  Click below to authenticate with the central backend and establish the connection. 
-                  This will also start the RabbitMQ listener to receive messages.
-                </p>
-
-                <Button onClick={handleHandshake} className="w-full" disabled={processing}>
-                  {processing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <Radio className="mr-2 h-4 w-4" />
-                      Initiate Handshake
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 3: Completed */}
-          {step === 3 && (
-            <Card className="border-green-200">
-              <CardHeader>
-                <CardTitle className="flex items-center text-green-700">
-                  <CheckCircle2 className="h-5 w-5 mr-2" />
-                  Configuration Complete
-                </CardTitle>
-                <CardDescription>
-                  Your node is connected and listening for messages
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between py-2 border-b border-green-200">
-                      <span className="text-green-900 font-medium">Client ID:</span>
-                      <span className="text-green-700 font-mono">{nodeConfig?.client_id}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b border-green-200">
-                      <span className="text-green-900 font-medium">Queue:</span>
-                      <span className="text-green-700 font-mono">{nodeConfig?.queue_name}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b border-green-200">
-                      <span className="text-green-900 font-medium">Namespace:</span>
-                      <span className="text-green-700 font-mono">{nodeConfig?.nessie_namespace}</span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-green-900 font-medium">Status:</span>
-                      <Badge variant="default" className="bg-green-600">Connected</Badge>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button onClick={() => setStep(1)} variant="outline" className="flex-1">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Edit Configuration
-                  </Button>
-                  <Button onClick={handleHandshake} variant="outline" className="flex-1" disabled={processing}>
-                    {processing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Reconnecting...
-                      </>
-                    ) : (
-                      <>
-                        <Radio className="mr-2 h-4 w-4" />
-                        Re-handshake
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button onClick={() => router.push('/dashboard')} className="flex-1">
-                    Go to Dashboard
-                  </Button>
-                  <Button onClick={() => router.push('/queue-viewer')} variant="outline" className="flex-1">
-                    View Queue
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => {
+              setStep(1);
+              setSuccess('');
+              setError('');
+            }}
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            Edit Configuration
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => {
+              setStep(2);
+              setSuccess('');
+              setError('');
+            }}
+          >
+            <Radio className="mr-2 h-4 w-4" />
+            Re-handshake
+          </Button>
+        </div>
+        <div className="flex gap-3">
+          <Button
+            className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-700 hover:to-cyan-700"
+            onClick={() => router.push('/dashboard')}
+          >
+            Go to Dashboard
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => router.push('/queue-viewer')}
+          >
+            View Queue
+          </Button>
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <DashboardShell
+      title="Node Setup"
+      description="Configure your hospital node with credentials from the central control plane"
+    >
+      <div className="mx-auto max-w-2xl py-8">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <p className="mt-4 text-sm text-slate-500">Loading node status...</p>
+          </div>
+        ) : (
+          <>
+            {renderProgressSteps()}
+            {renderError()}
+            {renderSuccess()}
+            {step === 1 && renderStep1()}
+            {step === 2 && renderStep2()}
+            {step === 3 && renderStep3()}
+          </>
+        )}
+      </div>
+    </DashboardShell>
   );
 }
