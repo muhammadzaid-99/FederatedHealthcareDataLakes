@@ -91,7 +91,7 @@ func Load() (*Config, error) {
 			DefaultBranch: getEnv("NESSIE_DEFAULT_BRANCH", "main"),
 		},
 		App: AppConfig{
-			Port:              getEnvAsInt("APP_PORT", 8080),
+			Port:              getEnvAsInt("PORT", 8080),
 			Environment:       getEnv("APP_ENV", "development"),
 			JWTSecret:         getEnv("JWT_SECRET", "change-me-in-production"),
 			JWTExpirationTime: time.Hour * time.Duration(getEnvAsInt("JWT_EXPIRATION_HOURS", 24)),
