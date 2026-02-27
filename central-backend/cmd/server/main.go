@@ -54,16 +54,18 @@ func main() {
 	auditService := services.NewAuditService()
 	nessieService := services.NewNessieService(cfg)
 
-	// Initialize RabbitMQ
-	rabbitMQService := services.NewRabbitMQService(cfg)
-	if err := rabbitMQService.Connect(); err != nil {
-		logrus.Fatalf("Failed to connect to RabbitMQ: %v", err)
-	}
-	defer rabbitMQService.Close()
+	// RabbitMQ removed — nodes now fetch requests on demand via HTTP REST.
+	// rabbitMQService := services.NewRabbitMQService(cfg)
+	// if err := rabbitMQService.Connect(); err != nil {
+	// 	logrus.Warnf("Failed to connect to RabbitMQ: %v (continuing without RabbitMQ)", err)
+	// 	rabbitMQService = nil
+	// } else {
+	// 	defer rabbitMQService.Close()
+	// }
 
 	// Initialize business services
-	hospitalService := services.NewHospitalService(cfg, authService, nessieService, rabbitMQService, auditService)
-	requestService := services.NewRequestService(rabbitMQService, auditService)
+	hospitalService := services.NewHospitalService(cfg, authService, nessieService, auditService)
+	requestService := services.NewRequestService(auditService)
 	queryBuilderService := services.NewQueryBuilderService(cfg.Proxy.Endpoint, cfg.Proxy.InternalAPIKey)
 
 	// Initialize default admin
@@ -78,7 +80,8 @@ func main() {
 	hospitalHandler := handlers.NewHospitalHandler(hospitalService, auditService)
 	requestHandler := handlers.NewRequestHandler(requestService, auditService)
 	queryHandler := handlers.NewQueryHandler(queryBuilderService, auditService)
-	healthHandler := handlers.NewHealthHandler(nessieService, rabbitMQService)
+	healthHandler := handlers.NewHealthHandler(nessieService, nil)
+	requestorAdminHandler := handlers.NewRequestorAdminHandler(authService, auditService)
 
 	// Setup router
 	router := api.NewRouter(
@@ -88,6 +91,7 @@ func main() {
 		requestHandler,
 		queryHandler,
 		healthHandler,
+		requestorAdminHandler,
 		authService,
 	)
 	ginEngine := router.Setup()

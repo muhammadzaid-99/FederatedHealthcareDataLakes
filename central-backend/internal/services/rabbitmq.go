@@ -103,6 +103,9 @@ func (s *RabbitMQService) setupDeadLetterQueue() error {
 
 // ProvisionHospitalQueue provisions a dedicated queue for a hospital
 func (s *RabbitMQService) ProvisionHospitalQueue(queueName string) error {
+	if s == nil {
+		return fmt.Errorf("RabbitMQ service is not initialized")
+	}
 	if !s.connected || s.channel == nil {
 		// Try to reconnect
 		if err := s.ensureConnection(); err != nil {
@@ -152,6 +155,9 @@ func (s *RabbitMQService) ProvisionHospitalQueue(queueName string) error {
 
 // PublishAccessRequest publishes an access request to hospital queues
 func (s *RabbitMQService) PublishAccessRequest(hospitalID string, requestID string, payload []byte) error {
+	if s == nil {
+		return fmt.Errorf("RabbitMQ service is not initialized")
+	}
 	if !s.connected || s.channel == nil {
 		// Try to reconnect
 		if err := s.ensureConnection(); err != nil {
@@ -193,6 +199,9 @@ func (s *RabbitMQService) PublishAccessRequest(hospitalID string, requestID stri
 
 // Close closes the RabbitMQ connection
 func (s *RabbitMQService) Close() error {
+	if s == nil {
+		return nil
+	}
 	if s.channel != nil {
 		if err := s.channel.Close(); err != nil {
 			logrus.WithError(err).Warn("Failed to close RabbitMQ channel")
@@ -237,6 +246,9 @@ func (s *RabbitMQService) ensureConnection() error {
 
 // HealthCheck checks if RabbitMQ connection is alive
 func (s *RabbitMQService) HealthCheck() error {
+	if s == nil {
+		return fmt.Errorf("RabbitMQ service is not initialized")
+	}
 	if !s.connected || s.conn == nil || s.conn.IsClosed() {
 		return fmt.Errorf("not connected to RabbitMQ")
 	}

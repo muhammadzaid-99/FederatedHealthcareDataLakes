@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  Users,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -19,6 +20,7 @@ const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
   { href: '/dashboard/pending', icon: UserCheck, label: 'Pending Approvals' },
   { href: '/dashboard/hospitals', icon: Building2, label: 'Hospitals' },
+  { href: '/dashboard/requestors', icon: Users, label: 'Requestors' },
   { href: '/dashboard/requests', icon: FileText, label: 'Data Requests' },
   // { href: '/dashboard/query', icon: Terminal, label: 'Query Console' },
 ]

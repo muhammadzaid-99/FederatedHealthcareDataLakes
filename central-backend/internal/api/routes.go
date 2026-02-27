@@ -11,13 +11,14 @@ import (
 )
 
 type Router struct {
-	cfg             *config.Config
-	authHandler     *handlers.AuthHandler
-	hospitalHandler *handlers.HospitalHandler
-	requestHandler  *handlers.RequestHandler
-	queryHandler    *handlers.QueryHandler
-	healthHandler   *handlers.HealthHandler
-	authService     *services.AuthService
+	cfg                   *config.Config
+	authHandler           *handlers.AuthHandler
+	hospitalHandler       *handlers.HospitalHandler
+	requestHandler        *handlers.RequestHandler
+	queryHandler          *handlers.QueryHandler
+	healthHandler         *handlers.HealthHandler
+	requestorAdminHandler *handlers.RequestorAdminHandler
+	authService           *services.AuthService
 }
 
 func NewRouter(
@@ -27,16 +28,18 @@ func NewRouter(
 	requestHandler *handlers.RequestHandler,
 	queryHandler *handlers.QueryHandler,
 	healthHandler *handlers.HealthHandler,
+	requestorAdminHandler *handlers.RequestorAdminHandler,
 	authService *services.AuthService,
 ) *Router {
 	return &Router{
-		cfg:             cfg,
-		authHandler:     authHandler,
-		hospitalHandler: hospitalHandler,
-		requestHandler:  requestHandler,
-		queryHandler:    queryHandler,
-		healthHandler:   healthHandler,
-		authService:     authService,
+		cfg:                   cfg,
+		authHandler:           authHandler,
+		hospitalHandler:       hospitalHandler,
+		requestHandler:        requestHandler,
+		queryHandler:          queryHandler,
+		healthHandler:         healthHandler,
+		requestorAdminHandler: requestorAdminHandler,
+		authService:           authService,
 	}
 }
 
@@ -107,6 +110,12 @@ func (r *Router) Setup() *gin.Engine {
 			admin.GET("/registrations", r.hospitalHandler.GetPendingRegistrations)
 			admin.PUT("/registrations/:id/approve", r.hospitalHandler.ApproveRegistration)
 			admin.PUT("/registrations/:id/reject", r.hospitalHandler.RejectRegistration)
+
+			// Requestor management
+			admin.GET("/requestors", r.requestorAdminHandler.GetAllRequestors)
+			admin.GET("/requestors/pending", r.requestorAdminHandler.GetPendingRequestors)
+			admin.PUT("/requestors/:id/approve", r.requestorAdminHandler.ApproveRequestor)
+			admin.PUT("/requestors/:id/reject", r.requestorAdminHandler.RejectRequestor)
 		}
 
 		// ============================================================
@@ -118,6 +127,9 @@ func (r *Router) Setup() *gin.Engine {
 		{
 			// Hospital's own status and configuration
 			hospitalAuth.GET("/me", r.hospitalHandler.GetHospitalStatus)
+
+			// Update data lake endpoint
+			hospitalAuth.PUT("/me/endpoint", r.hospitalHandler.UpdateDataLakeEndpoint)
 
 			// Generate client credentials for external node access
 			hospitalAuth.POST("/me/generate-credentials", func(c *gin.Context) {
@@ -143,6 +155,9 @@ func (r *Router) Setup() *gin.Engine {
 			{
 				// Node's own status
 				nodeAuth.GET("/me", r.hospitalHandler.GetNodeStatus)
+
+				// Data access requests for this node (replaces RabbitMQ push)
+				nodeAuth.GET("/requests", r.requestHandler.GetNodeRequests)
 			}
 		}
 

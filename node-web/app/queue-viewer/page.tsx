@@ -45,8 +45,8 @@ export default function QueueViewerPage() {
 
   return (
     <DashboardShell
-      title="Queue Viewer"
-      description="RabbitMQ messages from the central backend"
+      title="Message History"
+      description="Historical messages (RabbitMQ has been removed — this shows legacy data only)"
       actions={
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">

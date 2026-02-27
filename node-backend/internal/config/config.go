@@ -64,8 +64,9 @@ func Load() (*Config, error) {
 		JWT: JWTConfig{
 			Secret: getEnv("NODE_JWT_SECRET", "node-jwt-secret-change-in-production"),
 		},
+		// RabbitMQ config loading disabled — no longer used
 		RabbitMQ: RabbitMQConfig{
-			URL: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+			URL: "", // was: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 		},
 	}
 

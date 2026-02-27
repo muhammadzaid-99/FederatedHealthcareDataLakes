@@ -300,6 +300,7 @@ func (h *HospitalHandler) GetHospitalStatus(c *gin.Context) {
 		"status":           hospital.Status,
 		"nessie_namespace": hospital.NessieNamespace,
 		"queue_name":       hospital.QueueName,
+		"minio_endpoint":   hospital.MinIOEndpoint,
 		"created_at":       hospital.CreatedAt,
 		"updated_at":       hospital.UpdatedAt,
 	}
@@ -312,6 +313,47 @@ func (h *HospitalHandler) GetHospitalStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"hospital":  response,
 		"timestamp": time.Now(),
+	})
+}
+
+// UpdateDataLakeEndpoint updates the data lake (MinIO) endpoint for the hospital
+func (h *HospitalHandler) UpdateDataLakeEndpoint(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	hospitalID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hospital ID"})
+		return
+	}
+
+	var req struct {
+		Endpoint string `json:"endpoint" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "endpoint is required"})
+		return
+	}
+
+	hospital, err := h.hospitalService.UpdateMinIOEndpoint(hospitalID, req.Endpoint)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Audit log
+	h.auditService.LogWithActor(
+		"hospital",
+		hospital.ID.String(),
+		"update_endpoint",
+		hospitalID.String(),
+		"hospital",
+		c.ClientIP(),
+		nil,
+	)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "Data lake endpoint updated successfully",
+		"minio_endpoint": req.Endpoint,
 	})
 }
 

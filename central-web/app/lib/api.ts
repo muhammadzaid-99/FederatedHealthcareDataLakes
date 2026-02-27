@@ -20,6 +20,16 @@ export interface Hospital {
   updated_at: string
 }
 
+export interface Requestor {
+  id: string
+  name: string
+  email: string
+  organization: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
 export interface DataAccessRequest {
   id: string
   requestor_id: string
@@ -130,8 +140,14 @@ class APIClient {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to approve hospital')
+      let message = 'Failed to approve hospital'
+      try {
+        const error = await response.json()
+        message = error.error || message
+      } catch {
+        // Response body may not be valid JSON (e.g. server panic)
+      }
+      throw new Error(message)
     }
 
     return response.json()
@@ -145,8 +161,14 @@ class APIClient {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to reject hospital')
+      let message = 'Failed to reject hospital'
+      try {
+        const error = await response.json()
+        message = error.error || message
+      } catch {
+        // Response body may not be valid JSON (e.g. server panic)
+      }
+      throw new Error(message)
     }
   }
 
@@ -202,6 +224,95 @@ class APIClient {
   async getRequestById(requestId: string): Promise<DataAccessRequest> {
     const data = await this.getRequestStatus(requestId)
     return data.request
+  }
+
+  // Requestor admin management endpoints
+  async getPendingRequestors(): Promise<Requestor[]> {
+    const response = await fetch(`${API_BASE}/admin/requestors/pending`, {
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch pending requestors')
+    }
+
+    const data = await response.json()
+    return data.requestors || []
+  }
+
+  async getAllRequestors(status?: string): Promise<Requestor[]> {
+    const url = status
+      ? `${API_BASE}/admin/requestors?status=${status}`
+      : `${API_BASE}/admin/requestors`
+    const response = await fetch(url, {
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch requestors')
+    }
+
+    const data = await response.json()
+    return data.requestors || []
+  }
+
+  async approveRequestor(requestorId: string): Promise<{ message: string; requestor: Requestor }> {
+    const response = await fetch(`${API_BASE}/admin/requestors/${requestorId}/approve`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      let message = 'Failed to approve requestor'
+      try {
+        const error = await response.json()
+        message = error.error || message
+      } catch {}
+      throw new Error(message)
+    }
+
+    return response.json()
+  }
+
+  async rejectRequestor(requestorId: string, reason?: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/admin/requestors/${requestorId}/reject`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ reason: reason || '' }),
+    })
+
+    if (!response.ok) {
+      let message = 'Failed to reject requestor'
+      try {
+        const error = await response.json()
+        message = error.error || message
+      } catch {}
+      throw new Error(message)
+    }
+  }
+
+  async updateDataLakeEndpoint(endpoint: string): Promise<{ message: string; minio_endpoint: string }> {
+    const response = await fetch(`${API_BASE}/hospitals/me/endpoint`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ endpoint }),
+    })
+
+    if (!response.ok) {
+      let message = 'Failed to update data lake endpoint'
+      try {
+        const error = await response.json()
+        message = error.error || message
+      } catch {}
+      throw new Error(message)
+    }
+
+    return response.json()
   }
 
   // Hospital-specific endpoints

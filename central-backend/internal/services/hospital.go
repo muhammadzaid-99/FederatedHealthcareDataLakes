@@ -20,22 +20,20 @@ type HospitalService struct {
 	cfg           *config.Config
 	authService   *AuthService
 	nessieService *NessieService
-	rabbitMQ      *RabbitMQService
-	auditService  *AuditService
+	// rabbitMQ removed — nodes now fetch requests via HTTP REST
+	auditService *AuditService
 }
 
 func NewHospitalService(
 	cfg *config.Config,
 	authService *AuthService,
 	nessieService *NessieService,
-	rabbitMQ *RabbitMQService,
 	auditService *AuditService,
 ) *HospitalService {
 	return &HospitalService{
 		cfg:           cfg,
 		authService:   authService,
 		nessieService: nessieService,
-		rabbitMQ:      rabbitMQ,
 		auditService:  auditService,
 	}
 }
@@ -107,11 +105,12 @@ func (s *HospitalService) ApproveHospital(hospitalID uuid.UUID, adminID string) 
 		// Don't fail the approval if Nessie is unavailable
 	}
 
-	// Provision RabbitMQ queue
+	// RabbitMQ queue provisioning removed — nodes fetch requests via HTTP REST
+	// queueName := fmt.Sprintf("hospital.%s.requests", hospital.ID.String())
+	// if err := s.rabbitMQ.ProvisionHospitalQueue(queueName); err != nil {
+	// 	return nil, "", fmt.Errorf("failed to provision RabbitMQ queue: %w", err)
+	// }
 	queueName := fmt.Sprintf("hospital.%s.requests", hospital.ID.String())
-	if err := s.rabbitMQ.ProvisionHospitalQueue(queueName); err != nil {
-		return nil, "", fmt.Errorf("failed to provision RabbitMQ queue: %w", err)
-	}
 
 	// Update hospital record
 	hospital.Status = models.HospitalStatusCredentialsIssued
@@ -165,14 +164,18 @@ func (s *HospitalService) ApproveHospitalWithoutCredentials(hospitalID uuid.UUID
 		logrus.WithError(err).Warn("Failed to create Nessie namespace, continuing anyway")
 	}
 
-	// Provision RabbitMQ queue
+	// RabbitMQ queue provisioning removed — nodes fetch requests via HTTP REST
 	queueName := fmt.Sprintf("hospital.%s.requests", hospital.ID.String())
-	if err := s.rabbitMQ.ProvisionHospitalQueue(queueName); err != nil {
-		return nil, fmt.Errorf("failed to provision RabbitMQ queue: %w", err)
-	}
+	// if s.rabbitMQ != nil {
+	// 	if err := s.rabbitMQ.ProvisionHospitalQueue(queueName); err != nil {
+	// 		logrus.WithError(err).Warn("Failed to provision RabbitMQ queue, continuing anyway")
+	// 	}
+	// } else {
+	// 	logrus.Warn("RabbitMQ service not initialized, skipping queue provisioning")
+	// }
 
 	// Update hospital status to ACTIVE (with client_id, but no secret yet)
-	hospital.Status = models.HospitalStatusActive
+	hospital.Status = models.HospitalStatusCredentialsIssued
 	hospital.ClientID = &clientID // Set client_id here - it's permanent
 	hospital.NessieNamespace = &namespace
 	hospital.QueueName = &queueName
@@ -327,6 +330,27 @@ func (s *HospitalService) Handshake(hospital *models.Hospital, minioEndpoint str
 	}).Info("Hospital handshake completed")
 
 	return config, nil
+}
+
+// UpdateMinIOEndpoint updates the MinIO endpoint for a hospital
+func (s *HospitalService) UpdateMinIOEndpoint(hospitalID uuid.UUID, endpoint string) (*models.Hospital, error) {
+	var hospital models.Hospital
+
+	if err := database.DB.First(&hospital, "id = ?", hospitalID).Error; err != nil {
+		return nil, fmt.Errorf("hospital not found: %w", err)
+	}
+
+	hospital.MinIOEndpoint = &endpoint
+	if err := database.DB.Save(&hospital).Error; err != nil {
+		return nil, fmt.Errorf("failed to update hospital: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"hospital_id":    hospital.ID,
+		"minio_endpoint": endpoint,
+	}).Info("Hospital data lake endpoint updated")
+
+	return &hospital, nil
 }
 
 // GetPendingRegistrations returns all pending hospital registrations

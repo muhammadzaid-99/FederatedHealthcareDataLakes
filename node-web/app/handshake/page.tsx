@@ -20,7 +20,7 @@ export default function HandshakePage() {
   const [formData, setFormData] = useState({
     client_id: '',
     client_secret: '',
-    queue_name: '',
+    // queue_name removed — RabbitMQ no longer used
     nessie_namespace: '',
   });
 
@@ -39,7 +39,6 @@ export default function HandshakePage() {
         setFormData({
           client_id: config.client_id || '',
           client_secret: config.client_secret || '',
-          queue_name: config.queue_name || '',
           nessie_namespace: config.nessie_namespace || '',
         });
         setStep(3);
@@ -211,17 +210,6 @@ export default function HandshakePage() {
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">
-            Queue Name <span className="text-red-500">*</span>
-          </label>
-          <Input
-            value={formData.queue_name}
-            onChange={(e) => setFormData({ ...formData, queue_name: e.target.value })}
-            placeholder="hospital_queue_001"
-            required
-          />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">
             Nessie Namespace <span className="text-red-500">*</span>
           </label>
           <Input
@@ -266,10 +254,6 @@ export default function HandshakePage() {
             <span className="font-medium text-blue-900">{formData.client_id}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-blue-600">Queue Name</span>
-            <span className="font-medium text-blue-900">{formData.queue_name}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-blue-600">Nessie Namespace</span>
             <span className="font-medium text-blue-900">{formData.nessie_namespace}</span>
           </div>
@@ -277,7 +261,7 @@ export default function HandshakePage() {
       </div>
 
       <p className="mb-6 text-sm text-slate-600">
-        The handshake process will authenticate your node with the central server, register your queue,
+        The handshake process will authenticate your node with the central server
         and establish a secure connection for data exchange.
       </p>
 
@@ -318,10 +302,6 @@ export default function HandshakePage() {
           <div className="flex justify-between py-3 first:pt-0">
             <span className="text-sm text-emerald-600">Client ID</span>
             <span className="text-sm font-medium text-emerald-900">{nodeConfig?.client_id || formData.client_id}</span>
-          </div>
-          <div className="flex justify-between py-3">
-            <span className="text-sm text-emerald-600">Queue</span>
-            <span className="text-sm font-medium text-emerald-900">{nodeConfig?.queue_name || formData.queue_name}</span>
           </div>
           <div className="flex justify-between py-3">
             <span className="text-sm text-emerald-600">Namespace</span>
@@ -371,9 +351,9 @@ export default function HandshakePage() {
           <Button
             variant="outline"
             className="flex-1"
-            onClick={() => router.push('/queue-viewer')}
+            onClick={() => router.push('/requests')}
           >
-            View Queue
+            View Requests
           </Button>
         </div>
       </div>

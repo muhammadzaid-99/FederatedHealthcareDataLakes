@@ -54,7 +54,8 @@ func main() {
 	// Initialize services
 	authService := services.NewAuthService(cfg)
 	tokenService := services.NewTokenService(cfg)
-	rabbitMQService := services.NewRabbitMQService(cfg)
+	// rabbitMQService removed — nodes now fetch requests via HTTP REST
+	// rabbitMQService := services.NewRabbitMQService(cfg)
 	etlService := services.NewETLService(database.DB)
 	centralAPIService := services.NewCentralAPIService(cfg, tokenService)
 
@@ -73,38 +74,42 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
-	nodeHandler := handlers.NewNodeHandler(cfg, rabbitMQService)
+	nodeHandler := handlers.NewNodeHandler(cfg)
 	etlHandler := handlers.NewETLHandler(etlService)
 	dataRequestHandler := handlers.NewDataRequestHandler(dataRequestService)
 
-	// Check if node is already configured and start RabbitMQ listener
-	go func() {
-		time.Sleep(2 * time.Second) // Give database time to initialize
+	// RabbitMQ auto-connect disabled: nodes now fetch requests on demand via HTTP.
+	// Keeping the code commented out for rollback reference.
+	/*
+		go func() {
+			time.Sleep(2 * time.Second) // Give database time to initialize
 
-		var nodeConfig models.NodeConfig
-		if err := database.DB.First(&nodeConfig).Error; err == nil {
-			// Node is configured
-			if nodeConfig.AccessToken != "" && nodeConfig.QueueName != "" {
-				logrus.Info("Node already configured, attempting to start RabbitMQ listener...")
+			var nodeConfig models.NodeConfig
+			if err := database.DB.First(&nodeConfig).Error; err == nil {
+				// Node is configured
+				if nodeConfig.AccessToken != "" && nodeConfig.QueueName != "" {
+					logrus.Info("Node already configured, attempting to start RabbitMQ listener...")
 
-				// Connect to RabbitMQ
-				if err := rabbitMQService.Connect(cfg.RabbitMQ.URL); err != nil {
-					logrus.Errorf("Failed to connect to RabbitMQ on startup: %v", err)
-				} else {
-					// Start listening
-					if err := rabbitMQService.StartListening(nodeConfig.QueueName); err != nil {
-						logrus.Errorf("Failed to start RabbitMQ listener on startup: %v", err)
+					// Connect to RabbitMQ
+					if err := rabbitMQService.Connect(cfg.RabbitMQ.URL); err != nil {
+						logrus.Errorf("Failed to connect to RabbitMQ on startup: %v", err)
 					} else {
-						logrus.Infof("Successfully started RabbitMQ listener for queue: %s", nodeConfig.QueueName)
+						// Start listening
+						if err := rabbitMQService.StartListening(nodeConfig.QueueName); err != nil {
+							logrus.Errorf("Failed to start RabbitMQ listener on startup: %v", err)
+						} else {
+							logrus.Infof("Successfully started RabbitMQ listener for queue: %s", nodeConfig.QueueName)
+						}
 					}
+				} else {
+					logrus.Info("Node configured but handshake not completed yet")
 				}
 			} else {
-				logrus.Info("Node configured but handshake not completed yet")
+				logrus.Info("Node not configured yet, skipping RabbitMQ listener startup")
 			}
-		} else {
-			logrus.Info("Node not configured yet, skipping RabbitMQ listener startup")
-		}
-	}()
+		}()
+	*/
+	logrus.Info("RabbitMQ consumer disabled — nodes fetch requests via HTTP on demand")
 
 	// Setup router
 	routerInstance := api.NewRouter(cfg, authHandler, nodeHandler, etlHandler, dataRequestHandler, authService, tokenService)

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hms-fyp/node-backend/internal/models"
 	"github.com/hms-fyp/node-backend/internal/sts"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -45,6 +46,74 @@ func (s *DataRequestService) ListRequests(status string) ([]models.DataRequest, 
 	}
 
 	return requests, nil
+}
+
+// SyncRequestsFromCentral fetches pending data access requests from the central backend
+// via HTTP and creates local DataRequest records for any that don't already exist.
+// This replaces the RabbitMQ consumer for receiving new data access requests.
+func (s *DataRequestService) SyncRequestsFromCentral() error {
+	if s.centralAPIService == nil {
+		return fmt.Errorf("central API service not configured")
+	}
+
+	centralRequests, err := s.centralAPIService.FetchPendingRequests()
+	if err != nil {
+		return fmt.Errorf("failed to fetch requests from central: %w", err)
+	}
+
+	newCount := 0
+	for _, cr := range centralRequests {
+		// Check if we already have this request stored locally (by matching request_id in payload)
+		var existing models.DataRequest
+		err := s.db.Where("request_payload LIKE ?", "%\"request_id\":\""+cr.RequestID+"\"%").First(&existing).Error
+		if err == nil {
+			// Already exists locally, skip
+			continue
+		}
+
+		// Build the payload JSON (same format as the old RabbitMQ message)
+		payload := map[string]interface{}{
+			"type":            cr.Type,
+			"request_id":      cr.RequestID,
+			"requestor_id":    cr.RequestorID,
+			"requestor_email": cr.RequestorEmail,
+			"requestor_name":  cr.RequestorName,
+			"requestor_org":   cr.RequestorOrg,
+			"departments":     cr.Departments,
+			"purpose":         cr.Purpose,
+			"expires_at":      cr.ExpiresAt,
+			"created_at":      cr.CreatedAt,
+		}
+		payloadBytes, _ := json.Marshal(payload)
+
+		// Create DataRequest record (skip creating Message record — not needed for HTTP flow)
+		dataRequest := models.DataRequest{
+			MessageID:      uuid.Nil,
+			RequestorID:    cr.RequestorID,
+			RequestType:    "data_access",
+			Status:         "pending",
+			RequestPayload: string(payloadBytes),
+		}
+
+		if err := s.db.Create(&dataRequest).Error; err != nil {
+			logrus.WithError(err).Errorf("Failed to create DataRequest for central request %s", cr.RequestID)
+			continue
+		}
+
+		newCount++
+		logrus.WithFields(logrus.Fields{
+			"data_request_id":    dataRequest.ID,
+			"central_request_id": cr.RequestID,
+			"requestor_id":       cr.RequestorID,
+		}).Info("DataRequest created from central HTTP fetch")
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"fetched": len(centralRequests),
+		"new":     newCount,
+	}).Info("Sync from central backend completed")
+
+	return nil
 }
 
 // GetRequest retrieves a single data request by ID

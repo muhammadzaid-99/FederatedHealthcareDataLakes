@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,12 @@ func NewDataRequestHandler(service *services.DataRequestService) *DataRequestHan
 // ListRequests handles GET /api/v1/data-requests
 func (h *DataRequestHandler) ListRequests(c *gin.Context) {
 	status := c.Query("status") // Optional filter: pending, approved, rejected
+
+	// Sync requests from central backend on demand (replaces RabbitMQ consumer)
+	if err := h.service.SyncRequestsFromCentral(); err != nil {
+		// Log but don't fail — we can still show locally cached requests
+		log.Printf("[DataRequestHandler] Warning: failed to sync from central: %v", err)
+	}
 
 	requests, err := h.service.ListRequests(status)
 	if err != nil {

@@ -363,6 +363,30 @@ func (h *RequestHandler) GetRequestorRequestByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"request": request})
 }
 
+// GetNodeRequests returns data access requests for the authenticated hospital node.
+// Called by node backends via HTTP to fetch requests on demand (replaces RabbitMQ push).
+func (h *RequestHandler) GetNodeRequests(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	hospitalID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hospital ID"})
+		return
+	}
+
+	status := c.DefaultQuery("status", "") // optional filter: PENDING, APPROVED, REJECTED
+
+	requests, err := h.requestService.GetRequestsForHospital(hospitalID, status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch requests"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"requests": requests,
+		"count":    len(requests),
+	})
+}
+
 // GetActiveHospitals returns list of active hospitals for request form
 func (h *RequestHandler) GetActiveHospitals(c *gin.Context) {
 	hospitals, err := h.requestService.GetActiveHospitals()
