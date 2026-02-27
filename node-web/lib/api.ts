@@ -52,7 +52,7 @@ export const api = {
   async saveConfig(token: string, data: {
     client_id: string;
     client_secret: string;
-    queue_name: string;
+    queue_name?: string; // No longer required — RabbitMQ removed
     nessie_namespace?: string;
   }) {
     const response = await fetch(`${API_BASE_URL}/api/v1/config`, {
@@ -122,7 +122,7 @@ export const api = {
     return response.json();
   },
 
-  // Get RabbitMQ messages
+  // Get messages (legacy — RabbitMQ removed, kept for historical viewing)
   async getMessages(token: string) {
     const response = await fetch(`${API_BASE_URL}/api/v1/messages`, {
       headers: {

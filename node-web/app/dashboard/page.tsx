@@ -10,7 +10,6 @@ import {
   Activity,
   Database,
   FileText,
-  MessageSquare,
   Plug,
   RefreshCw,
   Server,
@@ -96,7 +95,6 @@ export default function DashboardPage() {
 
   const quickActions = [
     { href: '/requests', icon: FileText, label: 'Data Requests', desc: 'View and respond to incoming data access requests', color: 'blue' },
-    { href: '/queue-viewer', icon: MessageSquare, label: 'Queue Viewer', desc: 'Monitor RabbitMQ messages in real-time', color: 'amber' },
     { href: '/etl/config', icon: Settings, label: 'ETL Config', desc: 'Configure data extraction & transformation', color: 'violet' },
     { href: '/etl/jobs', icon: Workflow, label: 'ETL Jobs', desc: 'Monitor ETL job executions', color: 'cyan' },
   ];
@@ -243,7 +241,6 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   {[
                     { label: 'Client ID', value: hospitalInfo?.client_id },
-                    { label: 'Queue Name', value: hospitalInfo?.queue_name || 'N/A' },
                     { label: 'Nessie Namespace', value: hospitalInfo?.nessie_namespace || 'N/A' },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">

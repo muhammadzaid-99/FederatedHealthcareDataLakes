@@ -13,7 +13,7 @@ type NodeConfig struct {
 	ID                uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	ClientID          string    `gorm:"unique;not null" json:"client_id"`
 	ClientSecret      string    `gorm:"not null" json:"-"` // Never expose in JSON
-	QueueName         string    `gorm:"not null" json:"queue_name"`
+	QueueName         string    `json:"queue_name"`        // No longer required — RabbitMQ removed
 	NessieNamespace   string    `json:"nessie_namespace"`
 	MinioEndpoint     string    `json:"minio_endpoint"`
 	CentralBackendURL string    `json:"central_backend_url"`

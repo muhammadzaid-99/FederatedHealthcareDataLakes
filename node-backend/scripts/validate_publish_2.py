@@ -115,6 +115,7 @@ def write_iceberg_spark(
     df = df.withColumn(
         "checkup_date",
         coalesce(
+            to_date(col("checkup_created_at"), "yyyy-MM-dd HH:mm:ss.SSSSSS"),
             to_date(col("checkup_created_at"), "yyyy-MM-dd HH:mm:ss.SSS"),
             to_date(col("checkup_created_at"), "yyyy-MM-dd HH:mm:ss"),
             to_date(col("checkup_created_at"), "yyyy-MM-dd"),
@@ -315,6 +316,7 @@ def enrich_validate_and_publish(local_path: str, start: str, end: str):
             .config("spark.sql.catalog.nessie.s3.secret-access-key", MINIO_SECRET_KEY)
             .config("spark.sql.catalog.nessie.s3.path-style-access", "true")
             .config("spark.sql.catalog.nessie.s3.region", "us-east-1")
+            .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
             .config("spark.jars.packages", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.2,org.apache.hadoop:hadoop-aws:3.4.0,org.projectnessie.nessie-integrations:nessie-spark-extensions-3.5_2.12:0.103.3")
             .config("spark.jars.repositories", "https://repository.apache.org/content/repositories/snapshots/")
             .getOrCreate()

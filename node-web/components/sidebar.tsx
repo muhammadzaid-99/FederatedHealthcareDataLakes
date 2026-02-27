@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   FileText,
-  MessageSquare,
+  // MessageSquare, // Queue Viewer removed — RabbitMQ no longer used
   Settings,
   Workflow,
   Plug,
@@ -20,7 +20,7 @@ import { storage } from '@/lib/api'
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/requests', icon: FileText, label: 'Data Requests' },
-  { href: '/queue-viewer', icon: MessageSquare, label: 'Queue Viewer' },
+  // { href: '/queue-viewer', icon: MessageSquare, label: 'Queue Viewer' }, // RabbitMQ removed
   { href: '/etl/config', icon: Settings, label: 'ETL Configuration' },
   { href: '/etl/jobs', icon: Workflow, label: 'ETL Jobs' },
   { href: '/handshake', icon: Plug, label: 'Node Setup' },

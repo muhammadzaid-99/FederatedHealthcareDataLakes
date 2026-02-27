@@ -78,7 +78,7 @@ func (r *Router) Setup() *gin.Engine {
 			// Refresh status from central-backend
 			protected.POST("/node/refresh", r.nodeHandler.RefreshStatus)
 
-			// Messages from RabbitMQ
+			// Messages (legacy RabbitMQ — kept for historical message viewing)
 			protected.GET("/messages", r.nodeHandler.GetMessages)
 
 			// ETL Configuration

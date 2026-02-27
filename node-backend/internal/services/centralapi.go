@@ -146,3 +146,63 @@ type Credentials struct {
 	SessionToken    string
 	Expiration      time.Time
 }
+
+// CentralDataRequest represents a data access request fetched from central backend
+type CentralDataRequest struct {
+	Type           string   `json:"type"`
+	RequestID      string   `json:"request_id"`
+	RequestorID    string   `json:"requestor_id"`
+	RequestorEmail string   `json:"requestor_email,omitempty"`
+	RequestorName  string   `json:"requestor_name,omitempty"`
+	RequestorOrg   string   `json:"requestor_org,omitempty"`
+	Departments    []string `json:"departments"`
+	Purpose        string   `json:"purpose"`
+	ExpiresAt      string   `json:"expires_at"`
+	CreatedAt      string   `json:"created_at"`
+	Status         string   `json:"status"`
+}
+
+// FetchPendingRequests fetches data access requests for this node from central backend via HTTP.
+// This replaces the RabbitMQ consumer approach for data request delivery.
+func (s *CentralAPIService) FetchPendingRequests() ([]CentralDataRequest, error) {
+	token, err := s.tokenService.GetValidAccessToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/v1/nodes/requests", s.cfg.Central.BaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call central backend: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, fmt.Errorf("central backend returned status %d: %v", resp.StatusCode, errResp)
+	}
+
+	var result struct {
+		Requests []CentralDataRequest `json:"requests"`
+		Count    int                  `json:"count"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	logrus.WithField("count", result.Count).Info("[CentralAPI] Fetched data requests from central backend")
+
+	return result.Requests, nil
+}

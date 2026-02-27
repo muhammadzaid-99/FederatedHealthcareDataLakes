@@ -202,7 +202,6 @@ async function loadAllHospitals() {
                             <th>Admin Email</th>
                             <th>Status</th>
                             <th>Client ID</th>
-                            <th>Queue Name</th>
                             <th>Registered At</th>
                         </tr>
                     </thead>
@@ -213,7 +212,6 @@ async function loadAllHospitals() {
                                 <td>${escapeHtml(hospital.admin_email)}</td>
                                 <td><span class="badge ${getBadgeClass(hospital.status)}">${hospital.status}</span></td>
                                 <td><code>${hospital.client_id || 'N/A'}</code></td>
-                                <td><code>${hospital.queue_name || 'N/A'}</code></td>
                                 <td>${formatDate(hospital.created_at)}</td>
                             </tr>
                         `).join('')}
@@ -300,12 +298,6 @@ function showCredentials(hospital) {
             <div class="credential-value" id="namespace">${hospital.nessie_namespace}</div>
             <button class="copy-btn" onclick="copyToClipboard('namespace')">Copy</button>
         </div>
-        
-        <div class="credential-box">
-            <div class="credential-label">RabbitMQ Queue Name:</div>
-            <div class="credential-value" id="queueName">${hospital.queue_name}</div>
-            <button class="copy-btn" onclick="copyToClipboard('queueName')">Copy</button>
-        </div>
     `;
 
     modal.classList.add('active');
@@ -369,3 +361,5 @@ function getBadgeClass(status) {
     };
     return statusMap[status] || 'badge-pending';
 }
+
+

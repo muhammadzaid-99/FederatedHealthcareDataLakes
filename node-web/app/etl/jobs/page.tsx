@@ -42,7 +42,7 @@ interface ETLJob {
 /* ------------------------------------------------------------------ */
 
 function getStatusBadge(status: string) {
-  switch (status.toLowerCase()) {
+  switch (status) {
     case 'completed':
       return (
         <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200">
@@ -129,7 +129,7 @@ export default function ETLJobsPage() {
   const loadJobDetails = useCallback(async (id: string) => {
     try {
       const res = await api.get(`/etl/jobs/${id}`);
-      setSelectedJob(res);
+      setSelectedJob(res.job);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Failed to load job details';

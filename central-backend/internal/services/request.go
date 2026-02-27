@@ -12,13 +12,12 @@ import (
 )
 
 type RequestService struct {
-	rabbitMQ     *RabbitMQService
+	// rabbitMQ removed — nodes now fetch requests via HTTP REST
 	auditService *AuditService
 }
 
-func NewRequestService(rabbitMQ *RabbitMQService, auditService *AuditService) *RequestService {
+func NewRequestService(auditService *AuditService) *RequestService {
 	return &RequestService{
-		rabbitMQ:     rabbitMQ,
 		auditService: auditService,
 	}
 }
@@ -102,38 +101,46 @@ func (s *RequestService) CreateAccessRequest(
 }
 
 // routeRequestToNodes publishes the access request to each hospital's queue
+// NOTE: RabbitMQ publishing disabled — nodes now poll via HTTP GET /api/v1/nodes/requests
 func (s *RequestService) routeRequestToNodes(request *models.DataAccessRequest, hospitals []models.Hospital) error {
-	// Prepare message payload
-	payload := map[string]interface{}{
-		"type":         "data_request", // Message type for node-backend processing
-		"request_id":   request.ID.String(),
-		"requestor_id": request.RequestorID.String(),
-		"departments":  request.Departments,
-		"purpose":      request.Purpose,
-		"expires_at":   request.ExpiresAt,
-		"created_at":   request.CreatedAt,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	// Publish to each hospital's queue
-	for _, hospital := range hospitals {
-		if err := s.rabbitMQ.PublishAccessRequest(
-			hospital.ID.String(),
-			request.ID.String(),
-			payloadBytes,
-		); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"hospital_id": hospital.ID,
-				"request_id":  request.ID,
-				"error":       err,
-			}).Error("Failed to publish request to hospital queue")
-			// Continue to next hospital
+	// RabbitMQ publishing disabled: nodes fetch requests on demand via REST API.
+	// Keeping the old code commented out for rollback reference.
+	/*
+		// Prepare message payload
+		payload := map[string]interface{}{
+			"type":         "data_request",
+			"request_id":   request.ID.String(),
+			"requestor_id": request.RequestorID.String(),
+			"departments":  request.Departments,
+			"purpose":      request.Purpose,
+			"expires_at":   request.ExpiresAt,
+			"created_at":   request.CreatedAt,
 		}
-	}
+
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal payload: %%w", err)
+		}
+
+		for _, hospital := range hospitals {
+			if err := s.rabbitMQ.PublishAccessRequest(
+				hospital.ID.String(),
+				request.ID.String(),
+				payloadBytes,
+			); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"hospital_id": hospital.ID,
+					"request_id":  request.ID,
+					"error":       err,
+				}).Error("Failed to publish request to hospital queue")
+			}
+		}
+	*/
+
+	logrus.WithFields(logrus.Fields{
+		"request_id":      request.ID,
+		"hospitals_count": len(hospitals),
+	}).Info("Request stored — nodes will fetch via HTTP")
 
 	return nil
 }
@@ -447,40 +454,49 @@ func (s *RequestService) CreateRequestorAccessRequest(
 }
 
 // routeRequestorRequestToNodes publishes the access request to each hospital's queue
+// NOTE: RabbitMQ publishing disabled — nodes now poll via HTTP GET /api/v1/nodes/requests
 func (s *RequestService) routeRequestorRequestToNodes(request *models.DataAccessRequest, hospitals []models.Hospital, requestor *models.Requestor) error {
-	// Prepare message payload
-	payload := map[string]interface{}{
-		"type":            "data_request",
-		"request_id":      request.ID.String(),
-		"requestor_id":    request.RequestorID.String(),
-		"requestor_email": requestor.Email,
-		"requestor_name":  requestor.Name,
-		"requestor_org":   requestor.Organization,
-		"departments":     request.Departments,
-		"purpose":         request.Purpose,
-		"expires_at":      request.ExpiresAt,
-		"created_at":      request.CreatedAt,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	// Publish to each hospital's queue
-	for _, hospital := range hospitals {
-		if err := s.rabbitMQ.PublishAccessRequest(
-			hospital.ID.String(),
-			request.ID.String(),
-			payloadBytes,
-		); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"hospital_id": hospital.ID,
-				"request_id":  request.ID,
-				"error":       err,
-			}).Error("Failed to publish request to hospital queue")
+	// RabbitMQ publishing disabled: nodes fetch requests on demand via REST API.
+	// Keeping the old code commented out for rollback reference.
+	/*
+		payload := map[string]interface{}{
+			"type":            "data_request",
+			"request_id":      request.ID.String(),
+			"requestor_id":    request.RequestorID.String(),
+			"requestor_email": requestor.Email,
+			"requestor_name":  requestor.Name,
+			"requestor_org":   requestor.Organization,
+			"departments":     request.Departments,
+			"purpose":         request.Purpose,
+			"expires_at":      request.ExpiresAt,
+			"created_at":      request.CreatedAt,
 		}
-	}
+
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal payload: %%w", err)
+		}
+
+		for _, hospital := range hospitals {
+			if err := s.rabbitMQ.PublishAccessRequest(
+				hospital.ID.String(),
+				request.ID.String(),
+				payloadBytes,
+			); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"hospital_id": hospital.ID,
+					"request_id":  request.ID,
+					"error":       err,
+				}).Error("Failed to publish request to hospital queue")
+			}
+		}
+	*/
+
+	logrus.WithFields(logrus.Fields{
+		"request_id":      request.ID,
+		"requestor_id":    requestor.ID,
+		"hospitals_count": len(hospitals),
+	}).Info("Requestor request stored — nodes will fetch via HTTP")
 
 	return nil
 }
@@ -495,6 +511,53 @@ func (s *RequestService) GetRequestByIDForRequestor(requestID, requestorID uuid.
 	}
 
 	return &request, nil
+}
+
+// GetRequestsForHospital returns data access requests targeted at a specific hospital.
+// Used by node backends to poll for new requests via HTTP instead of RabbitMQ.
+func (s *RequestService) GetRequestsForHospital(hospitalID uuid.UUID, status string) ([]map[string]interface{}, error) {
+	var responses []models.NodeAccessResponse
+
+	query := database.DB.Where("hospital_id = ?", hospitalID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	if err := query.Order("created_at DESC").Find(&responses).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch responses for hospital: %w", err)
+	}
+
+	var result []map[string]interface{}
+	for _, resp := range responses {
+		// Load the parent request with requestor info
+		var request models.DataAccessRequest
+		if err := database.DB.Preload("Requestor").First(&request, "id = ?", resp.RequestID).Error; err != nil {
+			logrus.WithError(err).Warnf("Failed to load request %s for hospital response", resp.RequestID)
+			continue
+		}
+
+		entry := map[string]interface{}{
+			"type":         "data_request",
+			"request_id":   request.ID.String(),
+			"requestor_id": request.RequestorID.String(),
+			"departments":  request.Departments,
+			"purpose":      request.Purpose,
+			"expires_at":   request.ExpiresAt,
+			"created_at":   request.CreatedAt,
+			"status":       resp.Status,
+		}
+
+		// Include requestor details if available
+		if request.Requestor != nil {
+			entry["requestor_email"] = request.Requestor.Email
+			entry["requestor_name"] = request.Requestor.Name
+			entry["requestor_org"] = request.Requestor.Organization
+		}
+
+		result = append(result, entry)
+	}
+
+	return result, nil
 }
 
 // GetActiveHospitals returns list of active hospitals

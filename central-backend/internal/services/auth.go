@@ -283,3 +283,75 @@ func (s *AuthService) GetRequestorByID(id uuid.UUID) (*models.Requestor, error) 
 	}
 	return &requestor, nil
 }
+
+// GetPendingRequestors returns all requestors with PENDING status
+func (s *AuthService) GetPendingRequestors() ([]models.Requestor, error) {
+	var requestors []models.Requestor
+	if err := database.DB.Where("status = ?", models.RequestorStatusPending).
+		Order("created_at DESC").
+		Find(&requestors).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch pending requestors: %w", err)
+	}
+	return requestors, nil
+}
+
+// GetAllRequestors returns all requestors with optional status filter
+func (s *AuthService) GetAllRequestors(status string) ([]models.Requestor, error) {
+	var requestors []models.Requestor
+	query := database.DB
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	if err := query.Order("created_at DESC").Find(&requestors).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch requestors: %w", err)
+	}
+	return requestors, nil
+}
+
+// ApproveRequestor approves a pending requestor
+func (s *AuthService) ApproveRequestor(requestorID uuid.UUID) (*models.Requestor, error) {
+	var requestor models.Requestor
+
+	if err := database.DB.First(&requestor, "id = ?", requestorID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("requestor not found")
+		}
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+
+	if requestor.Status != models.RequestorStatusPending {
+		return nil, fmt.Errorf("requestor is not in pending status (current: %s)", requestor.Status)
+	}
+
+	requestor.Status = models.RequestorStatusApproved
+	if err := database.DB.Save(&requestor).Error; err != nil {
+		return nil, fmt.Errorf("failed to update requestor: %w", err)
+	}
+
+	return &requestor, nil
+}
+
+// RejectRequestor rejects a pending requestor
+func (s *AuthService) RejectRequestor(requestorID uuid.UUID, reason string) error {
+	var requestor models.Requestor
+
+	if err := database.DB.First(&requestor, "id = ?", requestorID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("requestor not found")
+		}
+		return fmt.Errorf("database error: %w", err)
+	}
+
+	if requestor.Status != models.RequestorStatusPending {
+		return fmt.Errorf("requestor is not in pending status (current: %s)", requestor.Status)
+	}
+
+	requestor.Status = models.RequestorStatusRejected
+	if err := database.DB.Save(&requestor).Error; err != nil {
+		return fmt.Errorf("failed to update requestor: %w", err)
+	}
+
+	return nil
+}

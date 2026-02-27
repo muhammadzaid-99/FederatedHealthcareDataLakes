@@ -29,6 +29,9 @@ import {
   Mail,
   Hash,
   CalendarDays,
+  Database,
+  Pencil,
+  Save,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 
@@ -41,6 +44,7 @@ interface HospitalInfo {
   client_secret?: string
   nessie_namespace?: string
   queue_name?: string
+  minio_endpoint?: string
   created_at: string
   updated_at: string
   handshake_at?: string
@@ -63,6 +67,13 @@ export default function HospitalDashboardPage() {
     client_secret: string
   } | null>(null)
 
+  // Data lake endpoint states
+  const [endpointInput, setEndpointInput] = useState('')
+  const [editingEndpoint, setEditingEndpoint] = useState(false)
+  const [savingEndpoint, setSavingEndpoint] = useState(false)
+  const [endpointError, setEndpointError] = useState('')
+  const [endpointSuccess, setEndpointSuccess] = useState('')
+
   useEffect(() => {
     loadHospitalInfo()
   }, [])
@@ -71,6 +82,7 @@ export default function HospitalDashboardPage() {
     try {
       const data = await api.getHospitalStatus()
       setHospital(data.hospital)
+      setEndpointInput(data.hospital.minio_endpoint || '')
     } catch (err: any) {
       if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
         router.push('/hospital/login')
@@ -80,6 +92,33 @@ export default function HospitalDashboardPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSaveEndpoint = async () => {
+    if (!endpointInput.trim()) {
+      setEndpointError('Endpoint URL is required')
+      return
+    }
+    setSavingEndpoint(true)
+    setEndpointError('')
+    setEndpointSuccess('')
+    try {
+      await api.updateDataLakeEndpoint(endpointInput.trim())
+      setEndpointSuccess('Data lake endpoint updated successfully')
+      setEditingEndpoint(false)
+      await loadHospitalInfo()
+      setTimeout(() => setEndpointSuccess(''), 3000)
+    } catch (err: any) {
+      setEndpointError(err.message)
+    } finally {
+      setSavingEndpoint(false)
+    }
+  }
+
+  const cancelEditEndpoint = () => {
+    setEditingEndpoint(false)
+    setEndpointInput(hospital?.minio_endpoint || '')
+    setEndpointError('')
   }
 
   const handleLogout = async () => {
@@ -458,14 +497,6 @@ export default function HospitalDashboardPage() {
                         icon={<Server className="w-3 h-3" />}
                       />
                     )}
-                    {hospital.queue_name && (
-                      <CredentialRow
-                        label="RabbitMQ Queue"
-                        value={hospital.queue_name}
-                        field="queue"
-                        icon={<Network className="w-3 h-3" />}
-                      />
-                    )}
                   </div>
                 ) : (
                   /* Has credentials */
@@ -530,14 +561,6 @@ export default function HospitalDashboardPage() {
                         icon={<Server className="w-3 h-3" />}
                       />
                     )}
-                    {hospital.queue_name && (
-                      <CredentialRow
-                        label="RabbitMQ Queue"
-                        value={hospital.queue_name}
-                        field="queue"
-                        icon={<Network className="w-3 h-3" />}
-                      />
-                    )}
                   </div>
                 )}
               </CardContent>
@@ -564,11 +587,6 @@ export default function HospitalDashboardPage() {
                     icon: <Server className="w-4 h-4 text-teal-500" />,
                   },
                   {
-                    label: 'Message Queue',
-                    value: hospital.queue_name,
-                    icon: <Network className="w-4 h-4 text-blue-500" />,
-                  },
-                  {
                     label: 'Status',
                     value: hospital.status.replace('_', ' '),
                     icon: <Activity className="w-4 h-4 text-emerald-500" />,
@@ -593,6 +611,106 @@ export default function HospitalDashboardPage() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* ---------- DATA LAKE ENDPOINT ---------- */}
+        {(hospital.status === 'ACTIVE' || hospital.status === 'CREDENTIALS_ISSUED') && (
+          <Card className="border-0 shadow-lg shadow-slate-200/40 rounded-2xl">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50">
+                    <Database className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  Data Lake Endpoint
+                </CardTitle>
+                {!editingEndpoint && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditingEndpoint(true)}
+                    className="gap-1.5 border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
+                )}
+              </div>
+              <CardDescription className="text-xs text-slate-400">
+                The endpoint URL for your hospital&apos;s data lake (MinIO/S3-compatible storage)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-2">
+              {endpointSuccess && (
+                <div className="mb-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200/60 rounded-xl px-4 py-3">
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <p className="text-sm text-emerald-700">{endpointSuccess}</p>
+                </div>
+              )}
+
+              {endpointError && (
+                <div className="mb-4 flex items-center gap-2 bg-rose-50 border border-rose-200/60 rounded-xl px-4 py-3">
+                  <XCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <p className="text-sm text-rose-700">{endpointError}</p>
+                </div>
+              )}
+
+              {editingEndpoint ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-2">Endpoint URL</label>
+                    <Input
+                      value={endpointInput}
+                      onChange={(e) => setEndpointInput(e.target.value)}
+                      placeholder="e.g. http://minio.hospital.local:9000"
+                      disabled={savingEndpoint}
+                      className="rounded-lg border-slate-200 focus-visible:ring-indigo-500/30 focus-visible:border-indigo-500 font-mono text-sm"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      Enter the URL where your hospital&apos;s S3-compatible data lake can be reached
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={cancelEditEndpoint}
+                      disabled={savingEndpoint}
+                      className="flex-1 rounded-lg border-slate-200 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSaveEndpoint}
+                      disabled={savingEndpoint || !endpointInput.trim()}
+                      className="flex-1 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md shadow-indigo-500/20"
+                    >
+                      {savingEndpoint ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Save Endpoint
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-slate-900 rounded-lg px-4 py-2.5">
+                  <Database className="w-4 h-4 text-slate-500 shrink-0" />
+                  <code className="flex-1 text-sm text-slate-100 font-mono break-all">
+                    {hospital.minio_endpoint || 'Not configured'}
+                  </code>
+                  {hospital.minio_endpoint && (
+                    <CopyButton value={hospital.minio_endpoint} field="minio_endpoint" />
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* ---------- DATA REQUESTS ---------- */}

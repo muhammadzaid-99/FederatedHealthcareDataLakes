@@ -10,7 +10,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U central -d centraldb"]
       interval: 10s
@@ -30,7 +30,7 @@ services:
     ports:
       - "5433:5432"  # Using different port to avoid conflict
     volumes:
-      - nessie_postgres_data:/var/lib/postgresql/data
+      - nessie_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nessie -d nessie"]
       interval: 10s
@@ -50,7 +50,7 @@ services:
     ports:
       - "5434:5432"  # Using different port to avoid conflict
     volumes:
-      - node_postgres_data:/var/lib/postgresql/data
+      - node_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U node_user -d node_db"]
       interval: 10s
@@ -60,26 +60,26 @@ services:
       - central-network
 
   # RabbitMQ Message Broker
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: central-rabbitmq
-    hostname: central-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-      RABBITMQ_ERLANG_COOKIE: 'SWQOKODSQALRPCLNMEQG'
-    ports:
-      - "5672:5672"   # AMQP port
-      - "15672:15672" # Management UI
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - central-network
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   container_name: central-rabbitmq
+  #   hostname: central-rabbitmq
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: guest
+  #     RABBITMQ_DEFAULT_PASS: guest
+  #     RABBITMQ_ERLANG_COOKIE: 'SWQOKODSQALRPCLNMEQG'
+  #   ports:
+  #     - "5672:5672"   # AMQP port
+  #     - "15672:15672" # Management UI
+  #   volumes:
+  #     - rabbitmq_data:/var/lib/rabbitmq
+  #   healthcheck:
+  #     test: ["CMD", "rabbitmq-diagnostics", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - central-network
 
   # Project Nessie - Git-like Version Control for Data Lakes
   # NOTE: We use Nessie ONLY as a metadata version control system (Git API).
@@ -109,74 +109,74 @@ services:
       - central-network
 
   # Central Control Plane Application (Backend)
-  central-backend:
-    build:
-      context: ./central-backend
-      dockerfile: Dockerfile
-    container_name: central-backend-app
-    environment:
-      DB_HOST: postgres-central
-      DB_PORT: 5432
-      DB_NAME: centraldb
-      DB_USER: central
-      DB_PASSWORD: centralpass
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: guest
-      RABBITMQ_PASSWORD: guest
-      NESSIE_ENDPOINT: http://nessie:19120
-      NESSIE_DEFAULT_BRANCH: main
-      APP_PORT: 8080
-      APP_ENV: development
-      JWT_SECRET: dev-secret-key-change-in-production
-      JWT_EXPIRATION_HOURS: 24
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: admin123
-      LOG_LEVEL: info
-      LOG_FORMAT: json
-      # Proxy settings (central-backend -> central-proxy)
-      PROXY_URL: http://central-proxy:8081
-      PROXY_INTERNAL_API_KEY: dev-internal-api-key-change-in-production
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres-central:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      nessie:
-        condition: service_healthy
-    networks:
-      - central-network
-    restart: unless-stopped
+  # central-backend:
+  #   build:
+  #     context: ./central-backend
+  #     dockerfile: Dockerfile
+  #   container_name: central-backend-app
+  #   environment:
+  #     DB_HOST: postgres-central
+  #     DB_PORT: 5432
+  #     DB_NAME: centraldb
+  #     DB_USER: central
+  #     DB_PASSWORD: centralpass
+  #     RABBITMQ_HOST: rabbitmq
+  #     RABBITMQ_PORT: 5672
+  #     RABBITMQ_USER: guest
+  #     RABBITMQ_PASSWORD: guest
+  #     NESSIE_ENDPOINT: http://nessie:19120
+  #     NESSIE_DEFAULT_BRANCH: main
+  #     APP_PORT: 8080
+  #     APP_ENV: development
+  #     JWT_SECRET: dev-secret-key-change-in-production
+  #     JWT_EXPIRATION_HOURS: 24
+  #     ADMIN_USERNAME: admin
+  #     ADMIN_PASSWORD: admin123
+  #     LOG_LEVEL: info
+  #     LOG_FORMAT: json
+  #     # Proxy settings (central-backend -> central-proxy)
+  #     PROXY_URL: http://central-proxy:8081
+  #     PROXY_INTERNAL_API_KEY: dev-internal-api-key-change-in-production
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     postgres-central:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     nessie:
+  #       condition: service_healthy
+  #   networks:
+  #     - central-network
+  #   restart: unless-stopped
 
   # Node Backend (Middleware for Hospital Nodes)
-  node-backend:
-    build:
-      context: ./node-backend
-      dockerfile: Dockerfile
-    container_name: node-backend-app
-    environment:
-      NODE_PORT: 9090
-      NODE_ENV: development
-      NODE_DB_HOST: postgres-node
-      NODE_DB_PORT: 5432
-      NODE_DB_USER: node_user
-      NODE_DB_PASSWORD: node_password
-      NODE_DB_NAME: node_db
-      NODE_DB_SSLMODE: disable
-      CENTRAL_BACKEND_URL: http://central-backend:8080
-      NODE_JWT_SECRET: node-jwt-secret-change-in-production
-    ports:
-      - "9090:9090"
-    depends_on:
-      postgres-node:
-        condition: service_healthy
-      central-backend:
-        condition: service_started
-    networks:
-      - central-network
-    restart: unless-stopped
+  # node-backend:
+  #   build:
+  #     context: ./node-backend
+  #     dockerfile: Dockerfile
+  #   container_name: node-backend-app
+  #   environment:
+  #     NODE_PORT: 9090
+  #     NODE_ENV: development
+  #     NODE_DB_HOST: postgres-node
+  #     NODE_DB_PORT: 5432
+  #     NODE_DB_USER: node_user
+  #     NODE_DB_PASSWORD: node_password
+  #     NODE_DB_NAME: node_db
+  #     NODE_DB_SSLMODE: disable
+  #     CENTRAL_BACKEND_URL: http://central-backend:8080
+  #     NODE_JWT_SECRET: node-jwt-secret-change-in-production
+  #   ports:
+  #     - "9090:9090"
+  #   depends_on:
+  #     postgres-node:
+  #       condition: service_healthy
+  #     central-backend:
+  #       condition: service_started
+  #   networks:
+  #     - central-network
+  #   restart: unless-stopped
 
   # Central Web (Admin Portal Frontend)
   # central-web:

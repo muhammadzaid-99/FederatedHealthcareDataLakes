@@ -9,14 +9,13 @@ import (
 )
 
 type HealthHandler struct {
-	nessieService   *services.NessieService
-	rabbitMQService *services.RabbitMQService
+	nessieService *services.NessieService
+	// rabbitMQService removed — RabbitMQ no longer used
 }
 
 func NewHealthHandler(nessieService *services.NessieService, rabbitMQService *services.RabbitMQService) *HealthHandler {
 	return &HealthHandler{
-		nessieService:   nessieService,
-		rabbitMQService: rabbitMQService,
+		nessieService: nessieService,
 	}
 }
 
@@ -27,7 +26,6 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 		"services": gin.H{
 			"database": "unknown",
 			"nessie":   "unknown",
-			"rabbitmq": "unknown",
 		},
 	}
 
@@ -55,13 +53,7 @@ func (h *HealthHandler) HealthCheck(c *gin.Context) {
 		// Don't mark as unhealthy, Nessie is optional
 	}
 
-	// Check RabbitMQ
-	if err := h.rabbitMQService.HealthCheck(); err == nil {
-		status["services"].(gin.H)["rabbitmq"] = "healthy"
-	} else {
-		status["services"].(gin.H)["rabbitmq"] = "unhealthy"
-		healthy = false
-	}
+	// RabbitMQ health check removed — no longer used
 
 	if !healthy {
 		status["status"] = "degraded"

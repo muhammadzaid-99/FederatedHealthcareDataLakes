@@ -10,19 +10,17 @@ import (
 	"github.com/hms-fyp/node-backend/internal/config"
 	"github.com/hms-fyp/node-backend/internal/database"
 	"github.com/hms-fyp/node-backend/internal/models"
-	"github.com/hms-fyp/node-backend/internal/services"
 	"github.com/sirupsen/logrus"
 )
 
 type NodeHandler struct {
-	cfg             *config.Config
-	rabbitMQService *services.RabbitMQService
+	cfg *config.Config
+	// rabbitMQService removed — nodes now fetch requests via HTTP REST
 }
 
-func NewNodeHandler(cfg *config.Config, rabbitMQService *services.RabbitMQService) *NodeHandler {
+func NewNodeHandler(cfg *config.Config) *NodeHandler {
 	return &NodeHandler{
-		cfg:             cfg,
-		rabbitMQService: rabbitMQService,
+		cfg: cfg,
 	}
 }
 
@@ -32,7 +30,7 @@ func (h *NodeHandler) SaveConfig(c *gin.Context) {
 	var req struct {
 		ClientID        string `json:"client_id" binding:"required"`
 		ClientSecret    string `json:"client_secret" binding:"required"`
-		QueueName       string `json:"queue_name" binding:"required"`
+		QueueName       string `json:"queue_name"` // No longer required — RabbitMQ removed
 		NessieNamespace string `json:"nessie_namespace"`
 	}
 
@@ -148,18 +146,21 @@ func (h *NodeHandler) Handshake(c *gin.Context) {
 
 	logrus.Info("Handshake with central-backend successful")
 
-	// Start RabbitMQ listener after successful handshake
-	go func() {
-		if err := h.rabbitMQService.Connect(h.cfg.RabbitMQ.URL); err != nil {
-			logrus.Errorf("Failed to connect to RabbitMQ: %v", err)
-			return
-		}
-		logrus.Info("Connected to RabbitMQ")
+	// RabbitMQ listener disabled: nodes now fetch requests on demand via HTTP.
+	// Keeping the code commented out for rollback reference.
+	/*
+		go func() {
+			if err := h.rabbitMQService.Connect(h.cfg.RabbitMQ.URL); err != nil {
+				logrus.Errorf("Failed to connect to RabbitMQ: %v", err)
+				return
+			}
+			logrus.Info("Connected to RabbitMQ")
 
-		if err := h.rabbitMQService.StartListening(nodeConfig.QueueName); err != nil {
-			logrus.Errorf("Failed to start RabbitMQ listener: %v", err)
-		}
-	}()
+			if err := h.rabbitMQService.StartListening(nodeConfig.QueueName); err != nil {
+				logrus.Errorf("Failed to start RabbitMQ listener: %v", err)
+			}
+		}()
+	*/
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "handshake successful",
