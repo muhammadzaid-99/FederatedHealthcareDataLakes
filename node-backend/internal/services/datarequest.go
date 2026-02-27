@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -225,6 +226,10 @@ func (s *DataRequestService) ApproveRequest(input ApprovalInput) (*models.DataRe
 		input.DurationSeconds,
 	)
 	if err != nil {
+		// Propagate policy_too_large errors with their message intact
+		if errors.Is(err, sts.ErrPolicyTooLarge) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to generate credentials: %w", err)
 	}
 

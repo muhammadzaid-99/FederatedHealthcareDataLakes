@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/hms-fyp/node-backend/internal/services"
+	"github.com/hms-fyp/node-backend/internal/sts"
 )
 
 type DataRequestHandler struct {
@@ -94,6 +96,15 @@ func (h *DataRequestHandler) ApproveRequest(c *gin.Context) {
 
 	request, err := h.service.ApproveRequest(approvalInput)
 	if err != nil {
+		// Return 400 for policy-too-large so the UI can show a helpful message
+		if errors.Is(err, sts.ErrPolicyTooLarge) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Policy too large for the selected date range. " +
+					"Try selecting complete months instead of individual dates, or reduce the number of departments/dates.",
+				"code": "POLICY_TOO_LARGE",
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to approve request", "details": err.Error()})
 		return
 	}

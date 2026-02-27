@@ -122,6 +122,12 @@ func GenerateRestrictedKeys(
 	return creds, nil
 }
 
+// MaxSTSPolicySize is the maximum policy size (bytes) that MinIO STS accepts.
+const MaxSTSPolicySize = 2048
+
+// ErrPolicyTooLarge is returned when the generated policy exceeds MinIO's limit.
+var ErrPolicyTooLarge = fmt.Errorf("policy_too_large")
+
 // GenerateRestrictedKeysForIceberg is a convenience function that generates temporary credentials
 // for Iceberg table access with department and date-based partitions
 func GenerateRestrictedKeysForIceberg(
@@ -140,17 +146,33 @@ func GenerateRestrictedKeysForIceberg(
 		return nil, "", fmt.Errorf("failed to build policy: %w", err)
 	}
 
-	// Convert policy to JSON
-	policyJSON, err := policyDoc.ToJSONPretty()
+	// Compact JSON for STS call (MinIO limits inline policy to 2048 bytes)
+	policyCompact, err := policyDoc.ToJSON()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to convert policy to JSON: %w", err)
 	}
 
-	// Generate credentials
-	creds, err := GenerateRestrictedKeys(ctx, stsClient, policyJSON, durationSeconds)
+	// Pretty JSON for storage/display
+	policyPretty, err := policyDoc.ToJSONPretty()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to convert policy to pretty JSON: %w", err)
+	}
+
+	log.Printf("[STS] Policy size: %d bytes (compact), limit: %d bytes", len(policyCompact), MaxSTSPolicySize)
+
+	if len(policyCompact) > MaxSTSPolicySize {
+		log.Printf("[STS] Policy too large (%d bytes). %d departments x %d date patterns = %d resource ARNs",
+			len(policyCompact), len(departments), len(dates), len(departments)*len(dates))
+		return nil, "", fmt.Errorf("%w: generated policy is %d bytes (limit %d). "+
+			"Try selecting complete months or fewer individual dates to reduce policy size",
+			ErrPolicyTooLarge, len(policyCompact), MaxSTSPolicySize)
+	}
+
+	// Generate credentials using compact policy
+	creds, err := GenerateRestrictedKeys(ctx, stsClient, policyCompact, durationSeconds)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to generate credentials: %w", err)
 	}
 
-	return creds, policyJSON, nil
+	return creds, policyPretty, nil
 }
