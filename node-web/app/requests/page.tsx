@@ -138,6 +138,7 @@ export default function RequestsPage() {
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approving, setApproving] = useState(false);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   /* ---- reject modal ---- */
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -192,6 +193,7 @@ export default function RequestsPage() {
 
     try {
       setApproving(true);
+      setApproveError(null);
       const user = storage.getUserInfo();
       await api.approveDataRequest(token, selectedRequest.id, {
         approved_by: user?.username || 'admin',
@@ -207,10 +209,13 @@ export default function RequestsPage() {
       setSelectedDepartments([]);
       setCredentialExpirySeconds(3600);
       setApprovalNotes('');
+      setApproveError(null);
       fetchRequests();
     } catch (err) {
       console.log(err);
-      setError(err instanceof Error ? err.message : 'Failed to approve request');
+      const message = err instanceof Error ? err.message : 'Failed to approve request';
+      // Show policy-size errors inside the modal, not the global banner
+      setApproveError(message);
     } finally {
       setApproving(false);
     }
@@ -246,6 +251,7 @@ export default function RequestsPage() {
     setSelectedDepartments([]);
     setCredentialExpirySeconds(3600);
     setApprovalNotes('');
+    setApproveError(null);
     setApproveModalOpen(true);
   };
 
@@ -555,6 +561,13 @@ export default function RequestsPage() {
               />
             </div>
           </div>
+
+          {approveError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold mb-1">Approval failed</p>
+              <p>{approveError}</p>
+            </div>
+          )}
 
           <DialogFooter className="gap-2">
             <Button variant="outline" className="rounded-xl" onClick={() => setApproveModalOpen(false)}>
