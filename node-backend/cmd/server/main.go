@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	Version     = "1.0.0"
-	BuildDate   = "2025-11-22"
+	Version     = "1.1.0"
+	BuildDate   = "2026-02-28"
 	Description = "Hospital Node Backend - Middleware for Node Web"
 )
 
@@ -44,6 +44,13 @@ func main() {
 	}).Info("Starting Node Backend...")
 
 	// Initialize database
+	logrus.WithFields(logrus.Fields{
+		"db_host":  cfg.Database.Host,
+		"db_port":  cfg.Database.Port,
+		"db_name":  cfg.Database.DBName,
+		"db_ssl":   cfg.Database.SSLMode,
+		"app_port": cfg.App.Port,
+	}).Info("Connecting to database...")
 	if err := database.Initialize(&cfg.Database); err != nil {
 		logrus.Fatalf("Failed to initialize database: %v", err)
 	}
