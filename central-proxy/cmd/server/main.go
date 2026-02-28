@@ -44,15 +44,21 @@ func main() {
 	credService := services.NewCredentialService(database.GetDB(), &cfg.Cache)
 
 	// Initialize Trino service (optional - will fail gracefully if Trino is not available)
+	// TRINO_DSN takes priority (full URL). Falls back to building from TRINO_HOST + TRINO_PORT.
 	var trinoService *services.TrinoService
-	trinoHost := getEnv("TRINO_HOST", "trino")
-	trinoPortStr := getEnv("TRINO_PORT", "8080")
-	trinoPort, err := strconv.Atoi(trinoPortStr)
-	if err != nil {
-		logrus.Warnf("Invalid TRINO_PORT value: %v", err)
-		trinoPort = 8080
+	trinoDSN := getEnv("TRINO_DSN", "")
+	if trinoDSN == "" {
+		trinoHost := getEnv("TRINO_HOST", "trino")
+		trinoPortStr := getEnv("TRINO_PORT", "8080")
+		trinoPort, parseErr := strconv.Atoi(trinoPortStr)
+		if parseErr != nil {
+			logrus.Warnf("Invalid TRINO_PORT value: %v", parseErr)
+			trinoPort = 8080
+		}
+		trinoDSN = fmt.Sprintf("http://admin@%s:%d?catalog=iceberg", trinoHost, trinoPort)
 	}
-	trinoService, err = services.NewTrinoService(trinoHost, trinoPort)
+	logrus.Infof("Trino DSN: %s", trinoDSN)
+	trinoService, err = services.NewTrinoService(trinoDSN)
 	if err != nil {
 		logrus.Warnf("Failed to connect to Trino (queries will be unavailable): %v", err)
 	} else {

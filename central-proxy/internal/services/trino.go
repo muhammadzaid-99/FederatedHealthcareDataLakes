@@ -35,11 +35,11 @@ type TableInfo struct {
 	Tables []string `json:"tables"`
 }
 
-// NewTrinoService creates a new Trino service
-func NewTrinoService(trinoHost string, trinoPort int) (*TrinoService, error) {
-	// Build the DSN for Trino
-	dsn := fmt.Sprintf("http://admin@%s:%d?catalog=iceberg", trinoHost, trinoPort)
-
+// NewTrinoService creates a new Trino service.
+// dsn can be:
+//   - A full URL like "https://admin@trino.healthlake.tech:443?catalog=iceberg"
+//   - A simple "http://admin@host:port?catalog=iceberg" for local Docker
+func NewTrinoService(dsn string) (*TrinoService, error) {
 	db, err := sql.Open("trino", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Trino: %w", err)
