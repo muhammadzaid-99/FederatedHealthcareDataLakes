@@ -1,0 +1,144 @@
+# ==============================================================================
+# Local Infrastructure Stack
+# Services: MinIO, Nessie, Trino, ETL Server
+#
+# Usage:
+#   cd local-infra
+#   docker compose up -d
+#
+# Ports:
+#   MinIO API:     9000
+#   MinIO Console: 9001
+#   Nessie:        19120
+#   Trino:         8082
+#   ETL Server:    9091
+# ==============================================================================
+
+services:
+
+  # ---------- MinIO (S3-compatible Object Storage) ----------
+  minio:
+    image: minio/minio
+    container_name: local-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin12345
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # networks:
+    #   - infra-net
+
+  # Auto-create buckets & ETL user on first boot
+  minio-init:
+    image: minio/mc
+    container_name: local-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      until (mc alias set local http://minio:9000 admin admin12345) do echo '...waiting...' && sleep 1; done;
+      mc admin policy create local etl-policy ./policies/etl-user.json &&
+      mc admin user add local etluser etlpass123 &&
+      mc admin policy attach local etl-policy --user etluser;
+      mc mb local/hospital-data;
+      mc cp ./init-folders.sh /tmp/init.sh &&
+      sh /tmp/init.sh
+      "
+    volumes:
+      - ../hms-datalakes/hospital_etl/policies:/policies
+      - ../hms-datalakes/hospital_etl/init-folders.sh:/init-folders.sh
+    # networks:
+    #   - infra-net
+
+  # ---------- Nessie (Iceberg Catalog / Git-for-Data) ----------
+  postgres-nessie:
+    image: postgres:16-alpine
+    container_name: local-nessie-pg
+    environment:
+      POSTGRES_DB: nessie
+      POSTGRES_USER: nessie
+      POSTGRES_PASSWORD: nessiepass
+    volumes:
+      - nessie_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nessie -d nessie"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    # networks:
+    #   - infra-net
+
+  nessie:
+    image: ghcr.io/projectnessie/nessie:latest
+    container_name: local-nessie
+    environment:
+      QUARKUS_HTTP_PORT: 19120
+      NESSIE_VERSION_STORE_TYPE: JDBC
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres-nessie:5432/nessie
+      QUARKUS_DATASOURCE_USERNAME: nessie
+      QUARKUS_DATASOURCE_PASSWORD: nessiepass
+    ports:
+      - "19120:19120"
+    depends_on:
+      postgres-nessie:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19120/api/v2/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # networks:
+    #   - infra-net
+
+  # ---------- Trino (Distributed SQL over Iceberg) ----------
+  trino:
+    image: trinodb/trino:464
+    container_name: local-trino
+    ports:
+      - "8082:8080"
+    volumes:
+      - ../trino/catalog:/etc/trino/catalog:ro
+      - ../trino/etc:/etc/trino/etc:ro
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx2G"
+    depends_on:
+      nessie:
+        condition: service_healthy
+    # networks:
+    #   - infra-net
+
+  # ---------- ETL Server (Python/PySpark Job Runner) ----------
+  # etl-server:
+  #   build:
+  #     context: ../etl-server
+  #     dockerfile: Dockerfile
+  #   container_name: local-etl-server
+  #   environment:
+  #     ETL_SERVER_PORT: "9091"
+  #     ETL_SERVER_ENV: development
+  #     ETL_INTERNAL_API_KEY: dev-etl-api-key
+  #   ports:
+  #     - "9091:9091"
+  #   volumes:
+  #     # Mount the Python scripts so ETL server can execute them
+  #     - ../node-backend/scripts:/app/scripts:ro
+  #   networks:
+  #     - infra-net
+
+volumes:
+  minio_data:
+  nessie_pg_data:
+
+# networks:
+#   infra-net:
+#     driver: bridge

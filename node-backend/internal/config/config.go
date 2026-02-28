@@ -77,7 +77,7 @@ func Load() (*Config, error) {
 		},
 		ETLServer: ETLServerConfig{
 			URL:            getEnv("ETL_SERVER_URL", "http://localhost:9091"),
-			InternalAPIKey: getEnv("ETL_INTERNAL_API_KEY", ""),
+			InternalAPIKey: getEnv("ETL_INTERNAL_API_KEY", "zaid"),
 		},
 	}
 
