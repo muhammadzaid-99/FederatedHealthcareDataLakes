@@ -24,7 +24,8 @@ func Initialize(cfg *config.DatabaseConfig) error {
 	gormLogger := logger.Default.LogMode(logger.Warn)
 
 	// Open database connection with retry logic
-	maxRetries := 5
+	// Keep retries low to stay within Heroku's 60s boot timeout
+	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 			Logger: gormLogger,
@@ -38,7 +39,7 @@ func Initialize(cfg *config.DatabaseConfig) error {
 		}
 
 		logrus.Warnf("Failed to connect to database (attempt %d/%d): %v", i+1, maxRetries, err)
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 2)
 	}
 
 	if err != nil {
