@@ -57,8 +57,14 @@ func Load() (*Config, error) {
 	// Try to load .env file (ignore error if not exists)
 	_ = godotenv.Load()
 
+	// Heroku sets PORT dynamically; fall back to PROXY_PORT for local dev
+	port := getEnvAsInt("PORT", 0)
+	if port == 0 {
+		port = getEnvAsInt("PROXY_PORT", 8081)
+	}
+
 	cfg := &Config{
-		Port:        getEnvAsInt("PROXY_PORT", 8081),
+		Port:        port,
 		Environment: getEnv("PROXY_ENV", "development"),
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 
@@ -100,7 +106,7 @@ func (c *Config) Validate() error {
 // GetDSN returns the PostgreSQL DSN connection string
 func (c *DatabaseConfig) GetDSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s connect_timeout=10",
 		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
 	)
 }
