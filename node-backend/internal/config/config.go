@@ -54,7 +54,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Port:        getEnv("NODE_PORT", "9090"),
+			Port:        getEnv("PORT", "9090"),
 			Environment: getEnv("NODE_ENV", "development"),
 		},
 		Database: DatabaseConfig{
@@ -86,7 +86,7 @@ func Load() (*Config, error) {
 
 func (c *DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=10",
 		c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode,
 	)
 }
