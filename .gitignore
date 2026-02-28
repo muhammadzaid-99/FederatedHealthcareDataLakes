@@ -14,7 +14,6 @@ node_modules/
 
 vendor/
 */vendor/
-go.sum
 
 ##########################################################
 # BUILD & DIST - Generated files
