@@ -8,11 +8,18 @@ import (
 )
 
 type Config struct {
-	App      AppConfig
-	Database DatabaseConfig
-	Central  CentralConfig
-	JWT      JWTConfig
-	RabbitMQ RabbitMQConfig
+	App       AppConfig
+	Database  DatabaseConfig
+	Central   CentralConfig
+	JWT       JWTConfig
+	RabbitMQ  RabbitMQConfig
+	ETLServer ETLServerConfig
+}
+
+// ETLServerConfig holds settings for communicating with the standalone ETL server
+type ETLServerConfig struct {
+	URL            string // e.g. http://localhost:9091
+	InternalAPIKey string // shared secret to authenticate with ETL server
 }
 
 type AppConfig struct {
@@ -67,6 +74,10 @@ func Load() (*Config, error) {
 		// RabbitMQ config loading disabled — no longer used
 		RabbitMQ: RabbitMQConfig{
 			URL: "", // was: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+		},
+		ETLServer: ETLServerConfig{
+			URL:            getEnv("ETL_SERVER_URL", "http://localhost:9091"),
+			InternalAPIKey: getEnv("ETL_INTERNAL_API_KEY", ""),
 		},
 	}
 

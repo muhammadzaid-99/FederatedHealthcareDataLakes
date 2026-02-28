@@ -56,7 +56,8 @@ func main() {
 	tokenService := services.NewTokenService(cfg)
 	// rabbitMQService removed — nodes now fetch requests via HTTP REST
 	// rabbitMQService := services.NewRabbitMQService(cfg)
-	etlService := services.NewETLService(database.DB)
+	etlClient := services.NewETLClient(&cfg.ETLServer)
+	etlService := services.NewETLService(database.DB, etlClient)
 	centralAPIService := services.NewCentralAPIService(cfg, tokenService)
 
 	// Get ETL config for MinIO credentials (needed for STS)
