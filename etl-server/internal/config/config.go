@@ -21,7 +21,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:           getEnv("ETL_SERVER_PORT", "9091"),
 		Environment:    getEnv("ETL_SERVER_ENV", "development"),
-		InternalAPIKey: getEnv("ETL_INTERNAL_API_KEY", ""),
+		InternalAPIKey: getEnv("ETL_INTERNAL_API_KEY", "zaid"),
 	}
 
 	return cfg, nil

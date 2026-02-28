@@ -1,0 +1,41 @@
+# ==============================================================================
+# Cloudflare Tunnel Config
+#
+# Routes 4 subdomains to local Docker services through a single tunnel.
+# Replace YOURDOMAIN with your actual .tech domain.
+#
+# This file is used by: cloudflared tunnel run
+# Location: copy to ~/.cloudflared/config.yml after tunnel creation
+# ==============================================================================
+
+tunnel: 6b1ec657-b947-45aa-bfc7-d6c007c9c5c3
+credentials-file: /home/muhammad-zaid/.cloudflared/6b1ec657-b947-45aa-bfc7-d6c007c9c5c3.json
+
+# Force HTTP/2 (TCP) instead of QUIC (UDP) — QUIC is blocked on some networks
+protocol: http2
+
+ingress:
+  - hostname: minio-h1.healthlake.tech
+    service: http://localhost:9000
+
+  - hostname: minio-h1-view.healthlake.tech
+    service: http://localhost:9001
+
+  - hostname: nessie.healthlake.tech
+    service: http://localhost:19120
+
+  - hostname: trino.healthlake.tech
+    service: http://localhost:8082
+
+  - hostname: etl-h1.healthlake.tech
+    service: http://localhost:9091
+
+  # Catch-all (required by cloudflared)
+  - service: http_status:404
+
+
+# cloudflared tunnel route dns hms-local minio-h1.healthlake.tech
+# cloudflared tunnel route dns hms-local minio-h1-view.healthlake.tech
+# cloudflared tunnel route dns hms-local nessie.healthlake.tech
+# cloudflared tunnel route dns hms-local trino.healthlake.tech
+# cloudflared tunnel route dns hms-local etl-h1.healthlake.tech

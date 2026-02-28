@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -45,7 +46,12 @@ func main() {
 	// Initialize Trino service (optional - will fail gracefully if Trino is not available)
 	var trinoService *services.TrinoService
 	trinoHost := getEnv("TRINO_HOST", "trino")
-	trinoPort := 8080
+	trinoPortStr := getEnv("TRINO_PORT", "8080")
+	trinoPort, err := strconv.Atoi(trinoPortStr)
+	if err != nil {
+		logrus.Warnf("Invalid TRINO_PORT value: %v", err)
+		trinoPort = 8080
+	}
 	trinoService, err = services.NewTrinoService(trinoHost, trinoPort)
 	if err != nil {
 		logrus.Warnf("Failed to connect to Trino (queries will be unavailable): %v", err)
