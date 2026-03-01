@@ -202,8 +202,8 @@ export default function RequestorQueryPage() {
       const where: string[] = []
       const deptList = sel.departments.map(d => `'${d}'`).join(', ')
       where.push(`department_name IN (${deptList})`)
-      if (sel.dateRangeStart) where.push(`date >= DATE '${sel.dateRangeStart}'`)
-      if (sel.dateRangeEnd) where.push(`date <= DATE '${sel.dateRangeEnd}'`)
+      if (sel.dateRangeStart) where.push(`checkup_date >= DATE '${sel.dateRangeStart}'`)
+      if (sel.dateRangeEnd) where.push(`checkup_date <= DATE '${sel.dateRangeEnd}'`)
 
       parts.push(
         `SELECT ${cols}\n  FROM iceberg."${sel.hospitalName}".${tableName}\n  WHERE ${where.join(' AND ')}`
@@ -594,7 +594,7 @@ export default function RequestorQueryPage() {
                     <AlertCircle className="h-5 w-5 mt-0.5" />
                     <pre className="text-sm whitespace-pre-wrap">{result.error}</pre>
                   </div>
-                ) : result.rows.length === 0 ? (
+                ) : (result.rows ?? []).length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>No results returned</p>
                   </div>
@@ -611,7 +611,7 @@ export default function RequestorQueryPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {result.rows.slice(0, 100).map((row, i) => (
+                        {(result.rows ?? []).slice(0, 100).map((row, i) => (
                           <TableRow key={i}>
                             {row.map((cell, j) => (
                               <TableCell key={j} className="font-mono text-xs">
@@ -628,7 +628,7 @@ export default function RequestorQueryPage() {
                         ))}
                       </TableBody>
                     </Table>
-                    {result.rows.length > 100 && (
+                    {result.rows && result.rows.length > 100 && (
                       <p className="text-sm text-muted-foreground text-center py-2">
                         Showing first 100 of {result.row_count} rows
                       </p>
