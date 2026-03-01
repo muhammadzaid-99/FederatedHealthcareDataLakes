@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -404,9 +405,9 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 		len(creds.SecretAccessKey),
 		len(creds.SessionToken))
 
-	// Use EndpointResolverWithOptions + HostnameImmutable to force MinIO-compatible
-	// path-style signing. The newer BaseEndpoint approach triggers AWS endpoint rules
-	// middleware that can alter the canonical host used for SigV4 signing.
+	// Build S3 client pointing at this hospital's MinIO endpoint.
+	// We use EndpointResolverWithOptions + HostnameImmutable=true so the
+	// bucket name is never prepended to the host.
 	minioResolver := aws.EndpointResolverWithOptionsFunc(
 		func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 			return aws.Endpoint{
@@ -429,16 +430,38 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 		o.UsePathStyle = true
 	})
 
-	result, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
+	// Generate a presigned URL instead of a signed GetObject request.
+	// Presigned URLs embed the signature in query params and only sign the
+	// 'host' header — Cloudflare Tunnel adding/modifying request headers
+	// (cf-request-id, x-forwarded-for, accept-encoding, etc.) cannot
+	// invalidate the signature the way a header-signed Authorization can.
+	presignClient := s3.NewPresignClient(s3Client, func(o *s3.PresignOptions) {
+		o.Expires = 15 * time.Minute
+	})
+
+	presignedReq, err := presignClient.PresignGetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get metadata from S3: %w", err)
+		return nil, fmt.Errorf("failed to presign S3 request: %w", err)
 	}
-	defer result.Body.Close()
 
-	body, err := io.ReadAll(result.Body)
+	logrus.Infof("Presigned URL generated (len=%d), fetching via plain GET", len(presignedReq.URL))
+
+	// Plain HTTP GET — all auth is in the URL, no Authorization header to tamper with
+	resp, err := c.httpClient.Get(presignedReq.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch metadata from S3: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("S3 returned HTTP %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata body: %w", err)
 	}
