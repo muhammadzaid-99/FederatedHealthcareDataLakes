@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	"github.com/hms-fyp/central-proxy/internal/models"
 	"github.com/hms-fyp/central-proxy/internal/services"
@@ -109,28 +110,39 @@ func (r *S3DataRouter) Handle(c *gin.Context) {
 		return
 	}
 
-	// Build the target URL
-	targetURL := fmt.Sprintf("%s/%s", strings.TrimSuffix(hospital.MinIOEndpoint, "/"), trimmedPath)
+	// Build the target object path (strip bucket prefix — path-style MinIO)
+	// trimmedPath = "hospital-data/iceberg/..." so the key starts after the bucket
+	objectKey := objectPath
 
-	logrus.Debugf("Routing S3 request to %s", targetURL)
+	logrus.Debugf("S3 Router: bucket=%s, key=%s, endpoint=%s", bucketName, objectKey, hospital.MinIOEndpoint)
 
-	// Create a new request to forward
+	// Build presigned URL: all auth in query params, so Cloudflare Tunnel
+	// adding/modifying headers cannot break the SigV4 signature.
+	presignedURL, err := r.presignRequest(c.Request.Method, bucketName, objectKey, creds)
+	if err != nil {
+		logrus.Errorf("Failed to presign S3 request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to presign request"})
+		return
+	}
+
+	logrus.Debugf("Presigned S3 URL (len=%d), proxying %s", len(presignedURL), c.Request.Method)
+
+	// Forward as plain HTTP request with no AWS auth headers
 	var bodyReader io.Reader
 	if c.Request.Body != nil {
 		bodyReader = c.Request.Body
 	}
 
-	req, err := http.NewRequest(c.Request.Method, targetURL, bodyReader)
+	req, err := http.NewRequest(c.Request.Method, presignedURL, bodyReader)
 	if err != nil {
 		logrus.Errorf("Failed to create request: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
 	}
 
-	// Copy relevant headers (exclude AWS auth headers - we'll re-sign)
+	// Copy safe, non-auth headers (content-type, range, etc.)
 	for key, values := range c.Request.Header {
 		lowerKey := strings.ToLower(key)
-		// Skip AWS auth headers and host
 		if lowerKey == "authorization" ||
 			strings.HasPrefix(lowerKey, "x-amz-") ||
 			lowerKey == "host" {
@@ -140,22 +152,9 @@ func (r *S3DataRouter) Handle(c *gin.Context) {
 			req.Header.Add(key, value)
 		}
 	}
-
-	// Set content headers if present
 	if c.Request.ContentLength > 0 {
 		req.ContentLength = c.Request.ContentLength
 	}
-
-	// Sign the request with hospital credentials using AWS SigV4
-	err = r.signRequest(req, creds)
-	if err != nil {
-		logrus.Errorf("Failed to sign request: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign request"})
-		return
-	}
-
-	logrus.Debugf("Proxying signed S3 request to %s: %s %s",
-		hospital.MinIOEndpoint, req.Method, req.URL.String())
 
 	// Forward the request
 	resp, err := r.httpClient.Do(req)
@@ -173,44 +172,65 @@ func (r *S3DataRouter) Handle(c *gin.Context) {
 		}
 	}
 
-	// Set status code
 	c.Writer.WriteHeader(resp.StatusCode)
 
-	// Copy response body
 	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
 		logrus.Errorf("Failed to copy response body: %v", err)
 	}
 }
 
-// signRequest signs an HTTP request using AWS SigV4
-func (r *S3DataRouter) signRequest(req *http.Request, creds *models.STSCredentials) error {
-	// Create credentials provider
-	credProvider := credentials.NewStaticCredentialsProvider(
-		creds.AccessKeyID,
-		creds.SecretAccessKey,
-		creds.SessionToken,
+// presignRequest generates a presigned URL for the given S3 method/bucket/key.
+// Only GET and HEAD are supported (Trino only reads data).
+func (r *S3DataRouter) presignRequest(method, bucket, key string, creds *models.STSCredentials) (string, error) {
+	minioResolver := aws.EndpointResolverWithOptionsFunc(
+		func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               creds.MinIOEndpoint,
+				HostnameImmutable: true,
+				SigningRegion:     "us-east-1",
+			}, nil
+		},
 	)
+	awsCfg := aws.Config{
+		Region: "us-east-1",
+		Credentials: credentials.NewStaticCredentialsProvider(
+			creds.AccessKeyID,
+			creds.SecretAccessKey,
+			creds.SessionToken,
+		),
+		EndpointResolverWithOptions: minioResolver,
+	}
+	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+	})
+	presignClient := s3.NewPresignClient(s3Client, func(o *s3.PresignOptions) {
+		o.Expires = 15 * time.Minute
+	})
 
-	// Get credentials
-	awsCreds, err := credProvider.Retrieve(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to retrieve credentials: %w", err)
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
 	}
 
-	// Create signer
-	signer := v4.NewSigner()
-
-	// For S3, we use unsigned payload for most requests
-	payloadHash := "UNSIGNED-PAYLOAD"
-	req.Header.Set("x-amz-content-sha256", payloadHash)
-
-	// Sign the request
-	err = signer.SignHTTP(context.Background(), awsCreds, req, payloadHash, "s3", "us-east-1", time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to sign request: %w", err)
+	switch strings.ToUpper(method) {
+	case http.MethodGet:
+		req, err := presignClient.PresignGetObject(context.Background(), input)
+		if err != nil {
+			return "", err
+		}
+		return req.URL, nil
+	case http.MethodHead:
+		req, err := presignClient.PresignHeadObject(context.Background(), &s3.HeadObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			return "", err
+		}
+		return req.URL, nil
+	default:
+		return "", fmt.Errorf("unsupported S3 method for presigning: %s", method)
 	}
-
-	return nil
 }
 
 // extractNamespaceFromPath attempts to extract the Nessie namespace from an S3 path
