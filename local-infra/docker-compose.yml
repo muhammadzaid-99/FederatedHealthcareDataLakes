@@ -108,7 +108,7 @@ services:
       - "8082:8080"
     volumes:
       - ../trino/catalog:/etc/trino/catalog:ro
-      - ../trino/etc:/etc/trino/etc:ro
+      - ../trino/etc/config.properties:/etc/trino/config.properties:ro
     environment:
       JAVA_TOOL_OPTIONS: "-Xmx2G"
     depends_on:

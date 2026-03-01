@@ -25,9 +25,11 @@ const NamespaceSeparator = "::"
 // IcebergCatalog implements the Iceberg REST Catalog API
 // using Nessie's Core API (/api/v2) as the backend
 type IcebergCatalog struct {
-	nessieEndpoint string
-	credService    *services.CredentialService
-	httpClient     *http.Client
+	nessieEndpoint  string
+	credService     *services.CredentialService
+	httpClient      *http.Client
+	minioAccessKey  string
+	minioSecretKey  string
 }
 
 // NessieEntry represents an entry from Nessie /api/v2/trees/{ref}/entries
@@ -108,11 +110,13 @@ type IcebergError struct {
 }
 
 // NewIcebergCatalog creates a new Iceberg REST Catalog handler
-func NewIcebergCatalog(nessieEndpoint string, credService *services.CredentialService) *IcebergCatalog {
+func NewIcebergCatalog(nessieEndpoint string, credService *services.CredentialService, minioAccessKey, minioSecretKey string) *IcebergCatalog {
 	return &IcebergCatalog{
 		nessieEndpoint: strings.TrimSuffix(nessieEndpoint, "/"),
 		credService:    credService,
 		httpClient:     &http.Client{},
+		minioAccessKey: minioAccessKey,
+		minioSecretKey: minioSecretKey,
 	}
 }
 
@@ -400,13 +404,25 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 
 	logrus.Infof("Fetching metadata from bucket=%s, key=%s, endpoint=%s", bucket, key, creds.MinIOEndpoint)
 
+	// Use static service credentials (admin/etluser) instead of the requestor's
+	// STS session token. STS tokens are ephemeral and lost on MinIO restart;
+	// central-proxy is a trusted service that reads metadata on behalf of all requestors.
+	accessKey := c.minioAccessKey
+	if accessKey == "" {
+		accessKey = creds.AccessKeyID
+	}
+	secretKey := c.minioSecretKey
+	if secretKey == "" {
+		secretKey = creds.SecretAccessKey
+	}
+
 	s3Client := s3.New(s3.Options{
 		Region:       "us-east-1",
 		BaseEndpoint: aws.String(creds.MinIOEndpoint),
 		Credentials: credentials.NewStaticCredentialsProvider(
-			creds.AccessKeyID,
-			creds.SecretAccessKey,
-			creds.SessionToken,
+			accessKey,
+			secretKey,
+			"", // no session token for static credentials
 		),
 		UsePathStyle: true,
 	})

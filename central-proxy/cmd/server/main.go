@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Initialize Iceberg Catalog (Hybrid Pointer implementation)
-	icebergCatalog := iceberg.NewIcebergCatalog(cfg.Nessie.Endpoint, credService)
+	icebergCatalog := iceberg.NewIcebergCatalog(cfg.Nessie.Endpoint, credService, cfg.MinIO.AccessKey, cfg.MinIO.SecretKey)
 
 	// Initialize S3 data router
 	s3Router := proxy.NewS3DataRouter(credService)

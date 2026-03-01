@@ -27,6 +27,16 @@ type Config struct {
 
 	// Internal API key for authenticating requests from central-backend
 	InternalAPIKey string
+
+	// MinIO service credentials for central-proxy to read Iceberg metadata
+	// These are the static MinIO credentials (not per-requestor STS tokens)
+	MinIO MinIOConfig
+}
+
+// MinIOConfig holds static MinIO credentials for central-proxy's own metadata reads
+type MinIOConfig struct {
+	AccessKey string
+	SecretKey string
 }
 
 // DatabaseConfig holds database connection settings
@@ -87,6 +97,11 @@ func Load() (*Config, error) {
 		},
 
 		InternalAPIKey: getEnv("INTERNAL_API_KEY", ""),
+
+		MinIO: MinIOConfig{
+			AccessKey: getEnv("MINIO_ACCESS_KEY", "admin"),
+			SecretKey: getEnv("MINIO_SECRET_KEY", "admin12345"),
+		},
 	}
 
 	return cfg, cfg.Validate()
