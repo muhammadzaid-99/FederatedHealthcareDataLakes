@@ -75,8 +75,8 @@ func (s *TrinoService) ExecuteQuery(query string) (*QueryResult, error) {
 		}, nil
 	}
 
-	// Prepare result slice
-	var resultRows [][]interface{}
+	// Prepare result slice — must be initialized (not nil) so JSON marshals as [] not null
+	resultRows := make([][]interface{}, 0)
 
 	// Create interface slice for scanning
 	values := make([]interface{}, len(columns))
