@@ -25,11 +25,9 @@ const NamespaceSeparator = "::"
 // IcebergCatalog implements the Iceberg REST Catalog API
 // using Nessie's Core API (/api/v2) as the backend
 type IcebergCatalog struct {
-	nessieEndpoint  string
-	credService     *services.CredentialService
-	httpClient      *http.Client
-	minioAccessKey  string
-	minioSecretKey  string
+	nessieEndpoint string
+	credService    *services.CredentialService
+	httpClient     *http.Client
 }
 
 // NessieEntry represents an entry from Nessie /api/v2/trees/{ref}/entries
@@ -110,13 +108,11 @@ type IcebergError struct {
 }
 
 // NewIcebergCatalog creates a new Iceberg REST Catalog handler
-func NewIcebergCatalog(nessieEndpoint string, credService *services.CredentialService, minioAccessKey, minioSecretKey string) *IcebergCatalog {
+func NewIcebergCatalog(nessieEndpoint string, credService *services.CredentialService) *IcebergCatalog {
 	return &IcebergCatalog{
 		nessieEndpoint: strings.TrimSuffix(nessieEndpoint, "/"),
 		credService:    credService,
 		httpClient:     &http.Client{},
-		minioAccessKey: minioAccessKey,
-		minioSecretKey: minioSecretKey,
 	}
 }
 
@@ -402,29 +398,35 @@ func (c *IcebergCatalog) fetchTableMetadata(metadataLocation string, creds *mode
 		return nil, fmt.Errorf("failed to parse metadata location: %w", err)
 	}
 
-	logrus.Infof("Fetching metadata from bucket=%s, key=%s, endpoint=%s", bucket, key, creds.MinIOEndpoint)
+	logrus.Infof("Fetching metadata: bucket=%s, key=%s, endpoint=%s, accessKeyID=%s, secretKeyLen=%d, sessionTokenLen=%d",
+		bucket, key, creds.MinIOEndpoint,
+		creds.AccessKeyID,
+		len(creds.SecretAccessKey),
+		len(creds.SessionToken))
 
-	// Use static service credentials (admin/etluser) instead of the requestor's
-	// STS session token. STS tokens are ephemeral and lost on MinIO restart;
-	// central-proxy is a trusted service that reads metadata on behalf of all requestors.
-	accessKey := c.minioAccessKey
-	if accessKey == "" {
-		accessKey = creds.AccessKeyID
-	}
-	secretKey := c.minioSecretKey
-	if secretKey == "" {
-		secretKey = creds.SecretAccessKey
-	}
-
-	s3Client := s3.New(s3.Options{
-		Region:       "us-east-1",
-		BaseEndpoint: aws.String(creds.MinIOEndpoint),
+	// Use EndpointResolverWithOptions + HostnameImmutable to force MinIO-compatible
+	// path-style signing. The newer BaseEndpoint approach triggers AWS endpoint rules
+	// middleware that can alter the canonical host used for SigV4 signing.
+	minioResolver := aws.EndpointResolverWithOptionsFunc(
+		func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+			return aws.Endpoint{
+				URL:               creds.MinIOEndpoint,
+				HostnameImmutable: true,
+				SigningRegion:     "us-east-1",
+			}, nil
+		},
+	)
+	awsCfg := aws.Config{
+		Region: "us-east-1",
 		Credentials: credentials.NewStaticCredentialsProvider(
-			accessKey,
-			secretKey,
-			"", // no session token for static credentials
+			creds.AccessKeyID,
+			creds.SecretAccessKey,
+			creds.SessionToken,
 		),
-		UsePathStyle: true,
+		EndpointResolverWithOptions: minioResolver,
+	}
+	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.UsePathStyle = true
 	})
 
 	result, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -79,7 +80,7 @@ func GenerateRestrictedKeys(
 		return nil, fmt.Errorf("policy is required")
 	}
 	if durationSeconds <= 0 {
-		durationSeconds = 3600 // Default 1 hour
+		durationSeconds = 43200 // Default 12 hours
 	}
 
 	// Generate a unique session name
@@ -110,11 +111,18 @@ func GenerateRestrictedKeys(
 	}
 
 	// Extract credentials from response
+	var expStr string
+	if result.Credentials.Expiration != nil {
+		// Must use RFC3339 format so downstream time.Parse(time.RFC3339, ...) succeeds.
+		// time.Time.String() produces a non-RFC3339 format that silently fails to parse.
+		expStr = result.Credentials.Expiration.Format(time.RFC3339)
+	}
+
 	creds := &TemporaryCredentials{
 		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
 		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
 		SessionToken:    aws.ToString(result.Credentials.SessionToken),
-		Expiration:      result.Credentials.Expiration.String(),
+		Expiration:      expStr,
 	}
 
 	log.Printf("[STS] Successfully generated temporary credentials, expires at: %s", creds.Expiration)
