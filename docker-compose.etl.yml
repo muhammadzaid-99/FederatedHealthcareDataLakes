@@ -1,0 +1,185 @@
+version: '3.9'
+
+services:
+  # ============================================================================
+  # DATA STORAGE LAYER
+  # ============================================================================
+  
+  # PostgreSQL - Source database for hospital data
+  postgres-hospital:
+    image: postgres:16-alpine
+    container_name: etl-postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-12345678}
+      POSTGRES_DB: ${DB_NAME:-hms}
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-hms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # MinIO - S3-compatible object storage for data lake
+  minio:
+    image: minio/minio:latest
+    container_name: etl-minio
+    hostname: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - etl-network
+    restart: unless-stopped
+
+  # MinIO Client - Initialize buckets and policies
+  minio-init:
+    image: minio/mc:latest
+    container_name: etl-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb --ignore-existing minio/hospital-data;
+      mc mb --ignore-existing minio/hospital-metadata;
+      echo 'MinIO buckets initialized successfully';
+      "
+    networks:
+      - etl-network
+    restart: on-failure
+
+  # ============================================================================
+  # ETL SERVICES
+  # ============================================================================
+
+  # ETL Server - HTTP API for triggering ETL jobs
+  etl-server:
+    build:
+      context: .
+      dockerfile: etl-server/Dockerfile
+    container_name: etl-server-app
+    hostname: etl-server
+    ports:
+      - "${ETL_SERVER_PORT:-9091}:9091"
+    environment:
+      # Server configuration
+      ETL_SERVER_PORT: 9091
+      ETL_SERVER_ENV: ${ETL_ENV:-development}
+      ETL_INTERNAL_API_KEY: ${ETL_API_KEY:-dev-etl-api-key}
+
+      # PostgreSQL - Source database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-hms}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-12345678}
+      DB_TABLE: ${DB_TABLE:-checkups}
+
+      # MinIO - Data lake storage
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ETL_USER:-etluser}
+      MINIO_SECRET_KEY: ${MINIO_ETL_PASSWORD:-etlpass123}
+      BUCKET_NAME: hospital-data
+
+      # Python and Spark configuration
+      PYTHONUNBUFFERED: 1
+      PYSPARK_PYTHON: /usr/local/bin/python
+      PYSPARK_DRIVER_PYTHON: /usr/local/bin/python
+      SPARK_NO_DAEMONIZE: 1
+      
+      # Resource limits for Spark
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY:-2g}
+      SPARK_EXECUTOR_MEMORY: ${SPARK_EXECUTOR_MEMORY:-2g}
+      SPARK_EXECUTOR_CORES: ${SPARK_EXECUTOR_CORES:-2}
+
+      # File paths
+      JDBC_DRIVER_PATH: /app/postgresql-42.7.7.jar
+      SCRIPTS_PATH: /app/scripts
+      OUTPUT_DIR: /app/parquet
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    depends_on:
+      postgres-hospital:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+    volumes:
+      # Persistent storage for parquet data
+      - etl_parquet_data:/app/parquet
+      # Configuration directory (optional override)
+      - ./etl-server/config:/app/config:ro
+      # Logs directory (optional)
+      - etl_logs:/var/log/etl
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+    networks:
+      - etl-network
+
+    restart: unless-stopped
+
+  # ============================================================================
+  # OPTIONAL: MONITORING & DEBUGGING
+  # ============================================================================
+
+  # PgAdmin - PostgreSQL administration interface (optional, for debugging)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: etl-pgadmin
+    hostname: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      - postgres-hospital
+    networks:
+      - etl-network
+    restart: unless-stopped
+    profiles:
+      - debug
+
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  etl_parquet_data:
+    driver: local
+  etl_logs:
+    driver: local
+
+networks:
+  etl-network:
+    driver: bridge
