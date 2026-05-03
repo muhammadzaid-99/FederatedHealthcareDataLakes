@@ -75,7 +75,7 @@ export default function LoginPage() {
         </div>
 
         <p className="relative z-10 text-xs text-slate-500">
-          Hospital Management System &mdash; Federated DLS
+          ::::
         </p>
       </div>
 
@@ -148,17 +148,6 @@ export default function LoginPage() {
               )}
             </button>
 
-            <div className="text-center space-y-2 pt-2">
-              <p className="text-xs text-slate-400">
-                Default credentials: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">admin / admin123</code>
-              </p>
-              <p className="text-sm text-slate-500">
-                Don&apos;t have an account?{' '}
-                <button type="button" onClick={() => router.push('/register')} className="text-blue-600 hover:text-blue-700 font-medium">
-                  Create one
-                </button>
-              </p>
-            </div>
           </form>
         </div>
       </div>

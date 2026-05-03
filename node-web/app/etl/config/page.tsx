@@ -14,16 +14,15 @@ import {
   Square,
   Database,
   HardDrive,
-  Terminal,
   Clock,
   Zap,
   Activity,
   Save,
   FlaskConical,
-  ServerCrash,
 } from "lucide-react";
 import { formatDateTimeString, formatTimeString } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -152,6 +151,7 @@ export default function ETLConfigPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const { toast } = useToast();
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -176,6 +176,8 @@ export default function ETLConfigPage() {
       if (response.config) {
         const loadedConfig = {
           ...response.config,
+          schedule_type: "frequency",
+          cron_expression: "",
           db_password: "",
           minio_secret_key: "",
         };
@@ -221,14 +223,26 @@ export default function ETLConfigPage() {
     setTestResult(null);
     try {
       console.log("Saving", config);
-      const response = await api.post("/etl/config", config);
+      const response = await api.post("/etl/config", {
+        ...config,
+        schedule_type: "frequency",
+        cron_expression: "",
+      });
       console.log("Save response:", response);
-      alert("ETL configuration saved successfully!");
+      toast({
+        title: "ETL configuration saved",
+        description: "Your settings have been updated.",
+        variant: "success",
+      });
       await loadConfig();
       await loadSchedulerStatus();
     } catch (error: any) {
       console.error("Save error:", error);
-      alert(`Failed to save configuration: ${error.message}`);
+      toast({
+        title: "Failed to save configuration",
+        description: error.message || "Please try again.",
+        variant: "error",
+      });
     } finally {
       setSaving(false);
     }
@@ -258,35 +272,53 @@ export default function ETLConfigPage() {
   const handleStartScheduler = async () => {
     try {
       await api.post("/etl/scheduler/start");
-      alert("ETL scheduler started successfully!");
+      toast({
+        title: "Scheduler started",
+        description: "The ETL scheduler is now running.",
+        variant: "success",
+      });
       loadSchedulerStatus();
     } catch (error: any) {
-      alert(
-        `Failed to start scheduler: ${error.response?.data?.error || error.message}`
-      );
+      toast({
+        title: "Failed to start scheduler",
+        description: error.response?.data?.error || error.message,
+        variant: "error",
+      });
     }
   };
 
   const handleStopScheduler = async () => {
     try {
       await api.post("/etl/scheduler/stop");
-      alert("ETL scheduler stopped successfully!");
+      toast({
+        title: "Scheduler stopped",
+        description: "The ETL scheduler has been stopped.",
+        variant: "success",
+      });
       loadSchedulerStatus();
     } catch (error: any) {
-      alert(
-        `Failed to stop scheduler: ${error.response?.data?.error || error.message}`
-      );
+      toast({
+        title: "Failed to stop scheduler",
+        description: error.response?.data?.error || error.message,
+        variant: "error",
+      });
     }
   };
 
   const handleRunManualJob = async () => {
     try {
       await api.post("/etl/jobs/run");
-      alert("ETL job started! Check the Jobs page for progress.");
+      toast({
+        title: "ETL job started",
+        description: "Check the Jobs page for progress.",
+        variant: "success",
+      });
     } catch (error: any) {
-      alert(
-        `Failed to start job: ${error.response?.data?.error || error.message}`
-      );
+      toast({
+        title: "Failed to start job",
+        description: error.response?.data?.error || error.message,
+        variant: "error",
+      });
     }
   };
 
@@ -332,6 +364,11 @@ export default function ETLConfigPage() {
     </div>
   );
 
+  const frequencyDays = Math.max(
+    1,
+    Math.round((config.frequency_seconds || 0) / 86400) || 1
+  );
+
   /* ================================================================ */
   /*  RENDER                                                           */
   /* ================================================================ */
@@ -374,7 +411,13 @@ export default function ETLConfigPage() {
 
                   {schedulerStatus.frequency_seconds != null && (
                     <StatusRow label="Frequency">
-                      Every {Math.floor(schedulerStatus.frequency_seconds / 60)} minutes
+                      {(() => {
+                        const days = Math.max(
+                          1,
+                          Math.round(schedulerStatus.frequency_seconds / 86400)
+                        );
+                        return `Every ${days} day${days === 1 ? "" : "s"}`;
+                      })()}
                     </StatusRow>
                   )}
 
@@ -394,8 +437,17 @@ export default function ETLConfigPage() {
                     schedulerStatus.next_run_in_seconds !== undefined &&
                     schedulerStatus.next_run_in_seconds > 0 && (
                       <StatusRow label="Next Run In">
-                        {Math.floor(schedulerStatus.next_run_in_seconds / 60)}m{" "}
-                        {schedulerStatus.next_run_in_seconds % 60}s
+                        {(() => {
+                          const totalSeconds = schedulerStatus.next_run_in_seconds || 0;
+                          const days = Math.floor(totalSeconds / 86400);
+                          const hours = Math.floor((totalSeconds % 86400) / 3600);
+                          const minutes = Math.floor((totalSeconds % 3600) / 60);
+                          const parts = [] as string[];
+                          if (days > 0) parts.push(`${days}d`);
+                          if (hours > 0) parts.push(`${hours}h`);
+                          if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+                          return parts.join(" ");
+                        })()}
                       </StatusRow>
                     )}
                 </>
@@ -606,62 +658,7 @@ export default function ETLConfigPage() {
         </SectionCard>
 
         {/* -------------------------------------------------------- */}
-        {/*  4. Python & Scripts                                      */}
-        {/* -------------------------------------------------------- */}
-        <SectionCard
-          icon={<Terminal className="h-5 w-5 text-violet-600" />}
-          iconBg="bg-violet-100"
-          title="Python & Scripts"
-          subtitle="Python environment and script paths"
-        >
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="python_path">Python Executable Path</Label>
-              <Input
-                id="python_path"
-                value={config.python_path}
-                onChange={(e) =>
-                  handleInputChange("python_path", e.target.value)
-                }
-                placeholder="/path/to/python"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="scripts_path">Scripts Directory Path</Label>
-              <Input
-                id="scripts_path"
-                value={config.scripts_path}
-                onChange={(e) =>
-                  handleInputChange("scripts_path", e.target.value)
-                }
-                placeholder="/path/to/scripts"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="jdbc_path">JDBC Driver Path</Label>
-              <Input
-                id="jdbc_path"
-                value={config.jdbc_path}
-                onChange={(e) => handleInputChange("jdbc_path", e.target.value)}
-                placeholder="/path/to/postgresql.jar"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="output_dir">Output Directory</Label>
-              <Input
-                id="output_dir"
-                value={config.output_dir}
-                onChange={(e) =>
-                  handleInputChange("output_dir", e.target.value)
-                }
-                placeholder="/path/to/output"
-              />
-            </div>
-          </div>
-        </SectionCard>
-
-        {/* -------------------------------------------------------- */}
-        {/*  5. Scheduling                                            */}
+        {/*  4. Scheduling                                            */}
         {/* -------------------------------------------------------- */}
         <SectionCard
           icon={<Clock className="h-5 w-5 text-amber-600" />}
@@ -675,75 +672,46 @@ export default function ETLConfigPage() {
                 type="checkbox"
                 id="schedule_enabled"
                 checked={config.schedule_enabled}
-                onChange={(e) =>
-                  handleInputChange("schedule_enabled", e.target.checked)
-                }
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  handleInputChange("schedule_enabled", enabled);
+                  if (enabled) {
+                    handleInputChange("schedule_type", "frequency");
+                    handleInputChange("cron_expression", "");
+                  }
+                }}
                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
               />
               <Label htmlFor="schedule_enabled">Enable Scheduled Jobs</Label>
             </div>
 
             {config.schedule_enabled && (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="schedule_type">Schedule Type</Label>
-                  <select
-                    id="schedule_type"
-                    value={config.schedule_type}
-                    onChange={(e) =>
-                      handleInputChange("schedule_type", e.target.value)
-                    }
-                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="frequency">Frequency-based</option>
-                    <option value="cron">Cron Expression</option>
-                  </select>
-                </div>
-
-                {config.schedule_type === "frequency" && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="frequency_seconds">
-                      Frequency (seconds)
-                    </Label>
-                    <Input
-                      id="frequency_seconds"
-                      type="number"
-                      value={config.frequency_seconds}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "frequency_seconds",
-                          parseInt(e.target.value)
-                        )
-                      }
-                      placeholder="300"
-                    />
-                    <p className="text-xs text-slate-500">
-                      Current: Every{" "}
-                      {Math.floor(config.frequency_seconds / 60)} minutes
-                    </p>
-                  </div>
-                )}
-
-                {config.schedule_type === "cron" && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cron_expression">Cron Expression</Label>
-                    <Input
-                      id="cron_expression"
-                      value={config.cron_expression}
-                      onChange={(e) =>
-                        handleInputChange("cron_expression", e.target.value)
-                      }
-                      placeholder="0 0 * * *"
-                    />
-                  </div>
-                )}
-              </>
+              <div className="space-y-1.5">
+                <Label htmlFor="frequency_days">Frequency (days)</Label>
+                <Input
+                  id="frequency_days"
+                  type="number"
+                  min={1}
+                  value={frequencyDays}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "frequency_seconds",
+                      Math.max(1, parseInt(e.target.value, 10) || 1) * 86400
+                    )
+                  }
+                  placeholder="1"
+                />
+                <p className="text-xs text-slate-500">
+                  Current: Every{" "}
+                  {frequencyDays} day(s)
+                </p>
+              </div>
             )}
           </div>
         </SectionCard>
 
         {/* -------------------------------------------------------- */}
-        {/*  6. Actions                                               */}
+        {/*  5. Actions                                               */}
         {/* -------------------------------------------------------- */}
         <SectionCard
           icon={<Zap className="h-5 w-5 text-rose-600" />}
