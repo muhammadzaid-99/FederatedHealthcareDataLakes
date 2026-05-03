@@ -26,9 +26,9 @@ type JobRequest struct {
 	NessieNamespace string `json:"nessie_namespace" binding:"required"`
 
 	// Python Environment
-	PythonPath  string `json:"python_path" binding:"required"`
-	ScriptsPath string `json:"scripts_path" binding:"required"`
-	JDBCPath    string `json:"jdbc_path" binding:"required"`
+	PythonPath  string `json:"python_path"`
+	ScriptsPath string `json:"scripts_path"`
+	JDBCPath    string `json:"jdbc_path"`
 
 	// Output
 	OutputDir string `json:"output_dir"`
@@ -45,9 +45,9 @@ type TestConnectionRequest struct {
 	DBName      string `json:"db_name" binding:"required"`
 	DBUser      string `json:"db_user" binding:"required"`
 	DBPassword  string `json:"db_password" binding:"required"`
-	PythonPath  string `json:"python_path" binding:"required"`
-	ScriptsPath string `json:"scripts_path" binding:"required"`
-	JDBCPath    string `json:"jdbc_path" binding:"required"`
+	PythonPath  string `json:"python_path"`
+	ScriptsPath string `json:"scripts_path"`
+	JDBCPath    string `json:"jdbc_path"`
 }
 
 // Job represents an ETL job tracked in memory

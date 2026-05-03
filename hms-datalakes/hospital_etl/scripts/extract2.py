@@ -54,6 +54,12 @@ REQUIRED_ENV_VARS = {
     "BUCKET_NAME": os.environ.get("BUCKET_NAME"),
 }
 
+# Apply Docker defaults for paths when env vars are missing
+if not REQUIRED_ENV_VARS["JDBC_DRIVER_PATH"]:
+    REQUIRED_ENV_VARS["JDBC_DRIVER_PATH"] = "/app/postgresql-42.7.7.jar"
+if not REQUIRED_ENV_VARS["OUTPUT_DIR"]:
+    REQUIRED_ENV_VARS["OUTPUT_DIR"] = "/app/parquet"
+
 # Fail fast if any required env var is missing or empty
 missing_vars = [name for name, value in REQUIRED_ENV_VARS.items() if not value]
 if missing_vars:

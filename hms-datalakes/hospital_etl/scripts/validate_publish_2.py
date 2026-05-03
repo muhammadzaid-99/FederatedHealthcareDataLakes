@@ -59,6 +59,10 @@ BUCKET_NAME = REQUIRED_ENV_VARS["BUCKET_NAME"]
 NESSIE_NAMESPACE = REQUIRED_ENV_VARS["NESSIE_NAMESPACE"]
 ENRICHMENT_VERSION = "v2"
 
+# Optional overrides
+NESSIE_URI = os.environ.get("NESSIE_URI", "http://localhost:19120/api/v1")
+SPARK_MASTER = os.environ.get("SPARK_MASTER", "local[4]")
+
 # Logger
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("ETL")
@@ -295,13 +299,13 @@ def enrich_validate_and_publish(local_path: str, start: str, end: str):
     with redirect_stdout(stdout_buffer):
         spark = (SparkSession.builder
             .appName("ValidatePublish_v2")
-            .master("local[4]")
+            .master(SPARK_MASTER)
             .config("spark.ui.showConsoleProgress", "false")
             .config("spark.ui.enabled", "false")
             .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
             .config("spark.sql.catalog.nessie", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.nessie.catalog-impl", "org.apache.iceberg.nessie.NessieCatalog")
-            .config("spark.sql.catalog.nessie.uri", "https://nessie.healthlake.tech/api/v1")
+            .config("spark.sql.catalog.nessie.uri", NESSIE_URI)
             .config("spark.sql.catalog.nessie.ref", "main")
             .config("spark.sql.catalog.nessie.warehouse", f"s3a://{BUCKET_NAME}/iceberg/")
             .config("spark.sql.catalog.nessie.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
