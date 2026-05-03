@@ -1,17 +1,17 @@
 # Build stage - Compile Go binary
 FROM golang:1.25-alpine AS builder
 
-WORKDIR /build
+WORKDIR /build/etl-server
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates
 
 # Copy go mod files
-COPY go.mod go.sum* ./
+COPY etl-server/go.mod etl-server/go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY . .
+COPY etl-server/ ./
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o etl-server ./cmd/server
