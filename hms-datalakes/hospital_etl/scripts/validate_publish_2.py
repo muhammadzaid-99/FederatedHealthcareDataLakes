@@ -301,7 +301,7 @@ def enrich_validate_and_publish(local_path: str, start: str, end: str):
             .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
             .config("spark.sql.catalog.nessie", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.nessie.catalog-impl", "org.apache.iceberg.nessie.NessieCatalog")
-            .config("spark.sql.catalog.nessie.uri", "http://localhost:19120/api/v1")
+            .config("spark.sql.catalog.nessie.uri", "https://nessie.healthlake.tech/api/v1")
             .config("spark.sql.catalog.nessie.ref", "main")
             .config("spark.sql.catalog.nessie.warehouse", f"s3a://{BUCKET_NAME}/iceberg/")
             .config("spark.sql.catalog.nessie.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
