@@ -513,45 +513,7 @@ export default function RequestDetailsPage() {
                           </div>
                         )}
 
-                        {/* Credentials */}
-                        {response.access_key_id && (
                           <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                              <Key className="h-4 w-4 text-emerald-500" />
-                              <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                                Temporary Credentials
-                              </h4>
-                            </div>
-
-                            <Separator className="bg-slate-100 dark:bg-slate-800" />
-
-                            <div className="grid gap-3">
-                              <CredentialField
-                                label="Access Key ID"
-                                value={response.access_key_id}
-                                fieldKey={`${response.id}-access`}
-                                copied={copied}
-                                onCopy={copyToClipboard}
-                              />
-                              {response.secret_access_key && (
-                                <CredentialField
-                                  label="Secret Access Key"
-                                  value={response.secret_access_key}
-                                  fieldKey={`${response.id}-secret`}
-                                  copied={copied}
-                                  onCopy={copyToClipboard}
-                                />
-                              )}
-                              {response.session_token && (
-                                <CredentialField
-                                  label="Session Token"
-                                  value={response.session_token}
-                                  fieldKey={`${response.id}-session`}
-                                  copied={copied}
-                                  onCopy={copyToClipboard}
-                                />
-                              )}
-                            </div>
 
                             {response.cred_expiration && (
                               <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2.5">
@@ -562,15 +524,6 @@ export default function RequestDetailsPage() {
                               </div>
                             )}
                           </div>
-                        )}
-
-                        {/* Show message if no credentials */}
-                        {!response.access_key_id && (
-                          <div className="text-center py-6 text-slate-400 dark:text-slate-500">
-                            <Key className="h-6 w-6 mx-auto mb-2 opacity-40" />
-                            <p className="text-sm">No credentials provided yet</p>
-                          </div>
-                        )}
 
                         {/* IAM Policy */}
                         {response.policy_json && (
