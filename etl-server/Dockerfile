@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir \
     pyspark==3.5.0 \
     boto3==1.26.139 \
     fhir.resources==6.5.0 \
-    pydantic==2.5.3 \
+    pydantic==1.10.13 \
     pandas==2.1.4
 
 # Create directory structure for ETL operations
