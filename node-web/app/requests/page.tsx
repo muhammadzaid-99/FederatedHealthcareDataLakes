@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { api, storage } from '@/lib/api';
 import { DashboardShell } from '@/components/dashboard-shell';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -24,10 +23,8 @@ import {
   Check,
   X,
   RefreshCw,
-  Key,
   Shield,
   Calendar as CalendarIcon,
-  Copy,
   Inbox,
 } from 'lucide-react';
 
@@ -54,11 +51,17 @@ interface DataRequest {
   created_at: string;
 }
 
-interface Credentials {
-  access_key_id: string;
-  secret_access_key: string;
-  session_token: string;
-  expiration: string;
+interface RequestPayload {
+  type?: string;
+  request_id?: string;
+  requestor_id?: string;
+  requestor_name?: string;
+  requestor_email?: string;
+  requestor_org?: string;
+  departments?: string[];
+  purpose?: string;
+  expires_at?: string;
+  created_at?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -108,9 +111,10 @@ function cardBorder(status: string) {
   return map[status] ?? '';
 }
 
-function parseCredentials(json: string): Credentials | null {
+function parseRequestPayload(payload?: string): RequestPayload | null {
+  if (!payload) return null;
   try {
-    return JSON.parse(json);
+    return JSON.parse(payload);
   } catch {
     return null;
   }
@@ -145,10 +149,9 @@ export default function RequestsPage() {
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [rejecting, setRejecting] = useState(false);
 
-  /* ---- credentials modal ---- */
-  const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
+  /* ---- details modal ---- */
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [viewingRequest, setViewingRequest] = useState<DataRequest | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
 
   /* ================================================================ */
   /*  Data fetching                                                    */
@@ -261,15 +264,9 @@ export default function RequestsPage() {
     setRejectModalOpen(true);
   };
 
-  const viewCredentials = (request: DataRequest) => {
+  const openDetailsModal = (request: DataRequest) => {
     setViewingRequest(request);
-    setCredentialsModalOpen(true);
-  };
-
-  const copyToClipboard = async (text: string, field: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(field);
-    setTimeout(() => setCopied(null), 2000);
+    setDetailsModalOpen(true);
   };
 
   /* ================================================================ */
@@ -366,81 +363,98 @@ export default function RequestsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {requests.map((request) => (
-            <div
-              key={request.id}
-              className={`rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow ${cardBorder(request.status)}`}
-            >
-              <div className="p-5">
-                <div className="flex justify-between items-start gap-4">
-                  {/* Left content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-3 mb-2">
-                      <StatusBadge status={request.status} />
-                      <span className="text-xs text-slate-400">
-                        {new Date(request.created_at).toLocaleString()}
-                      </span>
+          {requests.map((request) => {
+            const payload = parseRequestPayload(request.request_payload);
+            const requestorName = payload?.requestor_name || request.requestor_id;
+            return (
+              <div
+                key={request.id}
+                className={`rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow ${cardBorder(request.status)}`}
+              >
+                <div className="p-5">
+                  <div className="flex justify-between items-start gap-4">
+                    {/* Left content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
+                        <StatusBadge status={request.status} />
+                        <span className="text-xs text-slate-400">
+                          {new Date(request.created_at).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <h3 className="text-base font-semibold text-slate-900 mb-1 truncate">
+                        Request from: {requestorName}
+                      </h3>
+
+                      {payload?.requestor_org && (
+                        <p className="text-xs text-slate-500 mb-1">
+                          {payload.requestor_org}
+                        </p>
+                      )}
+
+                      <p className="text-sm text-slate-500 mb-1">
+                        Type:{' '}
+                        <span className="font-medium text-slate-600">
+                          {request.request_type || 'Data Access'}
+                        </span>
+                      </p>
+
+                      {payload?.purpose && (
+                        <p className="text-sm text-slate-500 mt-1">
+                          Purpose: {payload.purpose}
+                        </p>
+                      )}
+
+                      {request.notes && (
+                        <p className="text-sm text-slate-500 italic mt-1">Notes: {request.notes}</p>
+                      )}
+
+                      {request.date_range_start && request.date_range_end && (
+                        <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-2">
+                          <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+                          {request.date_range_start} → {request.date_range_end}
+                        </p>
+                      )}
                     </div>
 
-                    <h3 className="text-base font-semibold text-slate-900 mb-1 truncate">
-                      Request from: {request.requestor_id}
-                    </h3>
-
-                    <p className="text-sm text-slate-500 mb-1">
-                      Type: <span className="font-medium text-slate-600">{request.request_type || 'Data Access'}</span>
-                    </p>
-
-                    {request.notes && (
-                      <p className="text-sm text-slate-500 italic mt-1">Notes: {request.notes}</p>
-                    )}
-
-                    {request.date_range_start && request.date_range_end && (
-                      <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-2">
-                        <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
-                        {request.date_range_start} → {request.date_range_end}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Right actions */}
-                  <div className="flex flex-col gap-2 shrink-0">
-                    {request.status === 'pending' && (
-                      <>
-                        <Button
-                          size="sm"
-                          className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={() => openApproveModal(request)}
-                        >
-                          <Check className="h-4 w-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="rounded-xl"
-                          onClick={() => openRejectModal(request)}
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                    {request.status === 'approved' && request.credentials_json && (
+                    {/* Right actions */}
+                    <div className="flex flex-col gap-2 shrink-0">
                       <Button
                         size="sm"
                         variant="outline"
                         className="rounded-xl border-slate-200"
-                        onClick={() => viewCredentials(request)}
+                        onClick={() => openDetailsModal(request)}
                       >
-                        <Key className="h-4 w-4 mr-1" />
-                        Credentials
+                        <FileText className="h-4 w-4 mr-1" />
+                        Details
                       </Button>
-                    )}
+                      {request.status === 'pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={() => openApproveModal(request)}
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="rounded-xl"
+                            onClick={() => openRejectModal(request)}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -646,96 +660,128 @@ export default function RequestsPage() {
       </Dialog>
 
       {/* ============================================================ */}
-      {/*  Credentials Modal                                            */}
+      {/*  Request Details Modal                                       */}
       {/* ============================================================ */}
-      <Dialog open={credentialsModalOpen} onOpenChange={setCredentialsModalOpen}>
-        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto rounded-2xl">
+      <Dialog open={detailsModalOpen} onOpenChange={setDetailsModalOpen}>
+        <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-semibold text-slate-900">
               <Shield className="h-5 w-5 text-emerald-600" />
-              Temporary Access Credentials
+              Request Details
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-500">
-              These credentials provide temporary access to the approved data range. They will expire automatically.
+              Review the request metadata and IAM policy. No keys or tokens are shown here.
             </DialogDescription>
           </DialogHeader>
 
-          {viewingRequest && (
-            <div className="space-y-5 py-4">
-              {/* Date range badge */}
-              {viewingRequest.date_range_start && viewingRequest.date_range_end && (
-                <div className="flex items-center gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
-                  <CalendarIcon className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">
-                    Data Access Period: {viewingRequest.date_range_start} → {viewingRequest.date_range_end}
-                  </span>
+          {viewingRequest && (() => {
+            const payload = parseRequestPayload(viewingRequest.request_payload);
+            const requestorName = payload?.requestor_name || viewingRequest.requestor_id;
+            const policyText = viewingRequest.policy_json
+              ? (() => {
+                  try {
+                    return JSON.stringify(JSON.parse(viewingRequest.policy_json), null, 2);
+                  } catch {
+                    return viewingRequest.policy_json;
+                  }
+                })()
+              : null;
+
+            return (
+              <div className="space-y-5 py-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Requestor
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-800">{requestorName}</p>
+                    {payload?.requestor_org && (
+                      <p className="text-xs text-slate-500 mt-1">{payload.requestor_org}</p>
+                    )}
+                    {payload?.requestor_email && (
+                      <p className="text-xs text-slate-500 mt-1">{payload.requestor_email}</p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-2 break-all">ID: {viewingRequest.requestor_id}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Request Summary
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">
+                      Status: <span className="font-semibold">{viewingRequest.status}</span>
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      Type: <span className="font-semibold">{viewingRequest.request_type || 'Data Access'}</span>
+                    </p>
+                    {payload?.request_id && (
+                      <p className="mt-1 text-xs text-slate-500 break-all">
+                        Request ID: {payload.request_id}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Created: {new Date(viewingRequest.created_at).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-              )}
 
-              {/* Credentials */}
-              {viewingRequest.credentials_json &&
-                (() => {
-                  const creds = parseCredentials(viewingRequest.credentials_json);
-                  if (!creds) return <p className="text-sm text-rose-600">Error parsing credentials</p>;
+                {payload?.purpose && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Purpose</p>
+                    <p className="mt-2 text-sm text-slate-700">{payload.purpose}</p>
+                  </div>
+                )}
 
-                  const fields: { label: string; value: string; key: string }[] = [
-                    { label: 'Access Key ID', value: creds.access_key_id, key: 'access_key' },
-                    { label: 'Secret Access Key', value: creds.secret_access_key, key: 'secret_key' },
-                    { label: 'Session Token', value: creds.session_token, key: 'session_token' },
-                  ];
+                {payload?.departments && payload.departments.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Departments</p>
+                    <p className="mt-2 text-sm text-slate-700">
+                      {payload.departments.join(', ')}
+                    </p>
+                  </div>
+                )}
 
-                  return (
-                    <div className="space-y-4">
-                      {fields.map((f) => (
-                        <div key={f.key}>
-                          <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
-                            {f.label}
-                          </label>
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 overflow-auto max-h-24 rounded-xl bg-slate-900 p-3">
-                              <code className="text-xs font-mono text-emerald-400 break-all">{f.value}</code>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="shrink-0 rounded-lg"
-                              onClick={() => copyToClipboard(f.value, f.key)}
-                            >
-                              <Copy
-                                className={`h-4 w-4 transition-colors ${copied === f.key ? 'text-emerald-500' : 'text-slate-400'}`}
-                              />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                {viewingRequest.date_range_start && viewingRequest.date_range_end && (
+                  <div className="flex items-center gap-2 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+                    <CalendarIcon className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">
+                      Data Access Period: {viewingRequest.date_range_start} → {viewingRequest.date_range_end}
+                    </span>
+                  </div>
+                )}
 
-                      {/* Expiration */}
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                        <p className="text-sm text-amber-800">
-                          <span className="font-semibold">Expires:</span>{' '}
-                          {new Date(creds.expiration).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })()}
+                {payload?.expires_at && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="text-sm text-amber-800">
+                      <span className="font-semibold">Request Expires:</span>{' '}
+                      {new Date(payload.expires_at).toLocaleString()}
+                    </p>
+                  </div>
+                )}
 
-              {/* Policy viewer */}
-              {viewingRequest.policy_json && (
-                <details className="group mt-2">
-                  <summary className="cursor-pointer text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors">
-                    View IAM Policy
-                  </summary>
-                  <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs font-mono text-emerald-400 whitespace-pre-wrap break-words">
-                    {JSON.stringify(JSON.parse(viewingRequest.policy_json), null, 2)}
-                  </pre>
-                </details>
-              )}
-            </div>
-          )}
+                {viewingRequest.notes && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</p>
+                    <p className="mt-2 text-sm text-slate-700">{viewingRequest.notes}</p>
+                  </div>
+                )}
+
+                {policyText && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                      IAM Policy
+                    </p>
+                    <pre className="overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs font-mono text-emerald-400 whitespace-pre-wrap break-words">
+                      {policyText}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setCredentialsModalOpen(false)}>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDetailsModalOpen(false)}>
               Close
             </Button>
           </DialogFooter>

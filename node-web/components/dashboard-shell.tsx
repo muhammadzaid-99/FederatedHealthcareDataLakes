@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { storage } from '@/lib/api'
 import { Sidebar } from '@/components/sidebar'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, User } from 'lucide-react'
 
 interface DashboardShellProps {
   children: React.ReactNode
@@ -16,6 +16,7 @@ interface DashboardShellProps {
 export function DashboardShell({ children, title, description, actions }: DashboardShellProps) {
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
+  const [username, setUsername] = useState<string | null>(null)
 
   useEffect(() => {
     const token = storage.getToken()
@@ -23,6 +24,8 @@ export function DashboardShell({ children, title, description, actions }: Dashbo
       router.push('/login')
       return
     }
+    const userInfo = storage.getUserInfo()
+    setUsername(userInfo?.username || userInfo?.email || null)
     setAuthed(true)
   }, [router])
 
@@ -47,7 +50,15 @@ export function DashboardShell({ children, title, description, actions }: Dashbo
                 <p className="text-sm text-slate-500">{description}</p>
               )}
             </div>
-            {actions && <div className="flex items-center gap-3">{actions}</div>}
+            <div className="flex items-center gap-3">
+              {actions}
+              {username && (
+                <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                  <User className="h-3.5 w-3.5" />
+                  <span className="font-medium">{username}</span>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
