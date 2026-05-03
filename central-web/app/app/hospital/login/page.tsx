@@ -12,9 +12,6 @@ import {
   Lock,
   AlertCircle,
   Loader2,
-  HeartPulse,
-  ClipboardList,
-  ShieldCheck,
   ArrowRight,
 } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -65,24 +62,11 @@ export default function HospitalLoginPage() {
             HMS Hospital
             <span className="block text-cyan-400">Portal</span>
           </h1>
-          <p className="text-slate-400 text-lg max-w-sm leading-relaxed mb-12">
-            Manage patient records, ETL pipelines, and data sharing — all in one place.
+          <p className="text-slate-400 text-lg max-w-sm leading-relaxed mb-6">
+            View approval status, manage node credentials, and update your data lake endpoint.
           </p>
-
-          <div className="space-y-4 w-full max-w-xs">
-            {[
-              { icon: HeartPulse, text: 'Patient data management' },
-              { icon: ClipboardList, text: 'ETL pipeline orchestration' },
-              { icon: ShieldCheck, text: 'Secure data publishing' },
-            ].map(({ icon: Icon, text }) => (
-              <div
-                key={text}
-                className="flex items-center gap-3 rounded-lg border border-slate-700/60 bg-slate-800/50 px-4 py-3 backdrop-blur-sm"
-              >
-                <Icon className="h-5 w-5 shrink-0 text-cyan-400" />
-                <span className="text-sm text-slate-300">{text}</span>
-              </div>
-            ))}
+          <div className="rounded-lg border border-slate-700/60 bg-slate-800/50 px-4 py-3 text-sm text-slate-300">
+            This portal is focused on node onboarding and connectivity.
           </div>
         </div>
       </div>
@@ -104,7 +88,7 @@ export default function HospitalLoginPage() {
                 Hospital Sign In
               </CardTitle>
               <CardDescription className="text-slate-500">
-                Enter your credentials to access your hospital dashboard
+                Enter your credentials to access your hospital node settings
               </CardDescription>
             </CardHeader>
 

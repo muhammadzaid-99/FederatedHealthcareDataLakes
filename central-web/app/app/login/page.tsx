@@ -67,14 +67,14 @@ export default function LoginPage() {
             <span className="block text-violet-400">Control Plane</span>
           </h1>
           <p className="text-slate-400 text-lg max-w-sm leading-relaxed mb-12">
-            Federated healthcare data management — secure, unified, and compliant.
+            Manage hospital registrations, requestors, and data access approvals in one place.
           </p>
 
           <div className="space-y-4 w-full max-w-xs">
             {[
-              { icon: Database, text: 'Unified data lake governance' },
-              { icon: Network, text: 'Multi-hospital federation' },
-              { icon: Activity, text: 'Real-time pipeline monitoring' },
+              { icon: Database, text: 'Review data access requests' },
+              { icon: Network, text: 'Approve hospital registrations' },
+              { icon: Activity, text: 'Manage requestor accounts' },
             ].map(({ icon: Icon, text }) => (
               <div
                 key={text}
@@ -105,7 +105,7 @@ export default function LoginPage() {
                 Admin Sign In
               </CardTitle>
               <CardDescription className="text-slate-500">
-                Enter your credentials to access the control plane
+                Sign in to manage the central control plane
               </CardDescription>
             </CardHeader>
 
@@ -178,12 +178,6 @@ export default function LoginPage() {
                   )}
                 </Button>
               </form>
-
-              {/* Credentials hint */}
-              <div className="mt-6 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-center">
-                <p className="text-xs text-slate-500 mb-1">Default credentials</p>
-                <p className="text-sm font-mono text-slate-600">admin / admin123</p>
-              </div>
 
               {/* Links */}
               <div className="mt-6 text-center">

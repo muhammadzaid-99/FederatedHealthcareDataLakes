@@ -356,7 +356,7 @@ export default function ETLConfigPage() {
           </Badge>
           {schedulerStatus.is_running && schedulerStatus.next_run && (
             <Badge className="border-blue-200 bg-blue-50 text-blue-700">
-              Next: {formatTimeString(schedulerStatus.next_run)}
+              Next: {formatDateTimeString(schedulerStatus.next_run)}
             </Badge>
           )}
         </>

@@ -22,8 +22,6 @@ import {
   Eye,
   RefreshCw,
   Server,
-  Network,
-  Activity,
   Lock,
   Check,
   Mail,
@@ -271,7 +269,7 @@ export default function HospitalDashboardPage() {
   /* ------------------------------------------------------------------ */
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50/40">
+      <div className="min-h-screen bg-slate-50">
         <div className="border-b border-slate-200/80 bg-white/70 backdrop-blur-md">
           <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -300,7 +298,7 @@ export default function HospitalDashboardPage() {
   /* ------------------------------------------------------------------ */
   if (error || !hospital) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50/40 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-0 shadow-xl shadow-slate-200/50 rounded-2xl">
           <CardContent className="pt-10 pb-8 px-8">
             <div className="text-center">
@@ -330,7 +328,7 @@ export default function HospitalDashboardPage() {
   /*  MAIN RENDER                                                        */
   /* ------------------------------------------------------------------ */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-sky-50/40">
+    <div className="min-h-screen bg-slate-50">
       {/* ====== HEADER ====== */}
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/70 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between">
@@ -366,19 +364,7 @@ export default function HospitalDashboardPage() {
       {/* ====== CONTENT ====== */}
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* ---------- STATUS BANNER ---------- */}
-        <Card className="border-0 shadow-lg shadow-slate-200/40 rounded-2xl overflow-hidden">
-          <div
-            className={`h-1 ${
-              hospital.status === 'ACTIVE'
-                ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
-                : hospital.status === 'CREDENTIALS_ISSUED'
-                ? 'bg-gradient-to-r from-sky-400 to-blue-500'
-                : hospital.status === 'REJECTED'
-                ? 'bg-gradient-to-r from-rose-400 to-pink-500'
-                : 'bg-gradient-to-r from-amber-400 to-orange-400'
-            }`}
-          />
-
+        <Card className="border border-slate-200 shadow-sm rounded-2xl">
           <CardContent className="p-6">
             {hospital.status === 'PENDING' && (
               <div className="flex items-start gap-4 bg-amber-50/70 border border-amber-200/60 rounded-xl p-4">
@@ -450,11 +436,10 @@ export default function HospitalDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* ---------- CREDENTIALS & INFRA GRID ---------- */}
+        {/* ---------- CREDENTIALS ---------- */}
         {(hospital.status === 'ACTIVE' || hospital.status === 'CREDENTIALS_ISSUED') && (
-          <div className="grid lg:grid-cols-5 gap-6">
-            {/* Credentials – wider column */}
-            <Card className="lg:col-span-3 border-0 shadow-lg shadow-slate-200/40 rounded-2xl">
+          <div className="grid gap-6">
+            <Card className="border border-slate-200 shadow-sm rounded-2xl">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
@@ -565,57 +550,12 @@ export default function HospitalDashboardPage() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Infrastructure sidebar */}
-            <Card className="lg:col-span-2 border-0 shadow-lg shadow-slate-200/40 rounded-2xl">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50">
-                    <Activity className="w-4 h-4 text-teal-600" />
-                  </div>
-                  Infrastructure
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-400">
-                  Resources provisioned for your hospital
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-2 space-y-3">
-                {[
-                  {
-                    label: 'Nessie Namespace',
-                    value: hospital.nessie_namespace,
-                    icon: <Server className="w-4 h-4 text-teal-500" />,
-                  },
-                  {
-                    label: 'Status',
-                    value: hospital.status.replace('_', ' '),
-                    icon: <Activity className="w-4 h-4 text-emerald-500" />,
-                  },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between bg-slate-50/80 border border-slate-100 rounded-xl px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {item.icon}
-                      <div className="min-w-0">
-                        <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">
-                          {item.label}
-                        </p>
-                        <p className="text-sm font-mono text-slate-700 truncate">{item.value || '—'}</p>
-                      </div>
-                    </div>
-                    {item.value && <CopyButton value={item.value} field={`infra-${i}`} />}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
           </div>
         )}
 
         {/* ---------- DATA LAKE ENDPOINT ---------- */}
         {(hospital.status === 'ACTIVE' || hospital.status === 'CREDENTIALS_ISSUED') && (
-          <Card className="border-0 shadow-lg shadow-slate-200/40 rounded-2xl">
+          <Card className="border border-slate-200 shadow-sm rounded-2xl">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
@@ -714,7 +654,7 @@ export default function HospitalDashboardPage() {
         )}
 
         {/* ---------- DATA REQUESTS ---------- */}
-        <Card className="border-0 shadow-lg shadow-slate-200/40 rounded-2xl">
+        <Card className="border border-slate-200 shadow-sm rounded-2xl">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50">

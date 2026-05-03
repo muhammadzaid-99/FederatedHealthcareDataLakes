@@ -177,104 +177,130 @@ export default function ETLJobDetailsPage() {
 
       {job && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[
-              { label: 'ID', value: job.id },
-              { label: 'Status', value: job.status, badge: true },
-              { label: 'Stage', value: job.stage },
-              { label: 'Duration', value: formatDuration(job.start_time, job.end_time) },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-xl border border-slate-100 bg-slate-50 p-3"
-              >
-                <p className="text-xs text-slate-500">{item.label}</p>
-                {item.badge ? (
-                  <div className="mt-1">{getStatusBadge(item.value)}</div>
-                ) : (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Overview</p>
+                <p className="text-xs text-slate-500">Core job identifiers and state</p>
+              </div>
+              {getStatusBadge(job.status)}
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {[
+                { label: 'ID', value: job.id },
+                { label: 'Status', value: job.status, badge: true },
+                { label: 'Stage', value: job.stage },
+                { label: 'Duration', value: formatDuration(job.start_time, job.end_time) },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                >
+                  <p className="text-xs text-slate-500">{item.label}</p>
+                  {item.badge ? (
+                    <div className="mt-1">{getStatusBadge(item.value)}</div>
+                  ) : (
+                    <p className="mt-1 text-sm font-medium text-slate-800 break-all">
+                      {item.value}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-slate-900">Timing</p>
+              <p className="text-xs text-slate-500">Execution window and date range</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {[
+                { label: 'Start Time', value: formatDateTime(job.start_time) },
+                { label: 'End Time', value: formatDateTime(job.end_time) },
+                {
+                  label: 'Date Range',
+                  value:
+                    job.date_range_start && job.date_range_end
+                      ? `${formatDateTime(job.date_range_start)} - ${formatDateTime(job.date_range_end)}`
+                      : '—',
+                },
+                { label: 'Updated', value: formatDateTime(job.end_time || job.start_time) },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                >
+                  <p className="text-xs text-slate-500">{item.label}</p>
                   <p className="mt-1 text-sm font-medium text-slate-800 break-all">
                     {item.value}
                   </p>
-                )}
-              </div>
-            ))}
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[
-              { label: 'Start Time', value: formatDateTime(job.start_time) },
-              { label: 'End Time', value: formatDateTime(job.end_time) },
-              {
-                label: 'Date Range',
-                value:
-                  job.date_range_start && job.date_range_end
-                    ? `${formatDateTime(job.date_range_start)} - ${formatDateTime(job.date_range_end)}`
-                    : '—',
-              },
-              { label: 'Updated', value: formatDateTime(job.end_time || job.start_time) },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-xl border border-slate-100 bg-slate-50 p-3"
-              >
-                <p className="text-xs text-slate-500">{item.label}</p>
-                <p className="mt-1 text-sm font-medium text-slate-800 break-all">
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Extracted', value: job.records_extracted, color: 'text-teal-600' },
-              { label: 'Validated', value: job.records_validated, color: 'text-blue-600' },
-              { label: 'Failed', value: job.records_failed, color: 'text-rose-600' },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center"
-              >
-                <p className="text-xs text-slate-500">{stat.label}</p>
-                <p className={`mt-1 text-2xl font-bold ${stat.color}`}>
-                  {stat.value}
-                </p>
-              </div>
-            ))}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-slate-900">Record Counts</p>
+              <p className="text-xs text-slate-500">Extraction and validation totals</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {[
+                { label: 'Extracted', value: job.records_extracted, color: 'text-teal-600' },
+                { label: 'Validated', value: job.records_validated, color: 'text-blue-600' },
+                { label: 'Failed', value: job.records_failed, color: 'text-rose-600' },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center"
+                >
+                  <p className="text-xs text-slate-500">{stat.label}</p>
+                  <p className={`mt-1 text-2xl font-bold ${stat.color}`}>
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
 
           {job.message && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <p className="text-xs font-medium text-slate-500 mb-1">Message</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900 mb-2">Message</p>
               <p className="text-sm text-slate-700">{job.message}</p>
             </div>
           )}
 
           {(job.staging_path || job.normalized_path || job.validated_path) && (
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-medium text-slate-500 mb-2">File Paths</p>
-              {[
-                { label: 'Staging', path: job.staging_path },
-                { label: 'Normalized', path: job.normalized_path },
-                { label: 'Validated', path: job.validated_path },
-              ]
-                .filter((f) => f.path)
-                .map((f) => (
-                  <div key={f.label} className="flex gap-2 text-sm">
-                    <span className="text-slate-500 min-w-[90px]">
-                      {f.label}:
-                    </span>
-                    <span className="font-mono text-slate-700 break-all">
-                      {f.path}
-                    </span>
-                  </div>
-                ))}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900 mb-2">File Paths</p>
+              <div className="space-y-2">
+                {[
+                  { label: 'Staging', path: job.staging_path },
+                  { label: 'Normalized', path: job.normalized_path },
+                  { label: 'Validated', path: job.validated_path },
+                ]
+                  .filter((f) => f.path)
+                  .map((f) => (
+                    <div key={f.label} className="flex gap-2 text-sm">
+                      <span className="text-slate-500 min-w-[90px]">
+                        {f.label}:
+                      </span>
+                      <span className="font-mono text-slate-700 break-all">
+                        {f.path}
+                      </span>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
 
           {job.logs && (
-            <div>
-              <p className="text-xs font-medium text-slate-500 mb-2">Logs</p>
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-slate-900">Logs</p>
+                <span className="text-xs text-slate-500">Latest execution output</span>
+              </div>
               <pre className="bg-slate-900 rounded-xl p-4 text-emerald-400 font-mono text-xs max-h-80 overflow-auto whitespace-pre-wrap">
                 {job.logs}
               </pre>
