@@ -22,6 +22,13 @@ type Executor struct {
 	jobs map[string]*models.Job
 }
 
+const (
+	defaultPythonPath  = "/usr/local/bin/python"
+	defaultScriptsPath = "/app/scripts"
+	defaultJDBCPath    = "/app/postgresql-42.7.7.jar"
+	defaultOutputDir   = "/app/parquet"
+)
+
 // NewExecutor creates a new Executor
 func NewExecutor() *Executor {
 	return &Executor{
@@ -31,6 +38,7 @@ func NewExecutor() *Executor {
 
 // SubmitJob creates a new job, starts execution asynchronously, and returns the job ID
 func (e *Executor) SubmitJob(req *models.JobRequest) string {
+	applyJobDefaults(req)
 	jobID := uuid.New().String()
 
 	// Determine date range
@@ -79,6 +87,7 @@ func (e *Executor) GetJob(jobID string) *models.Job {
 
 // TestConnection tests database connectivity using PySpark
 func (e *Executor) TestConnection(req *models.TestConnectionRequest) error {
+	applyTestDefaults(req)
 	jdbcURL := fmt.Sprintf("jdbc:postgresql://%s:%d/%s", req.DBHost, req.DBPort, req.DBName)
 
 	testScript := `
@@ -272,6 +281,28 @@ func (e *Executor) runExtraction(req *models.JobRequest, start, end string) (str
 	}
 
 	return stagingPath, false, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func applyJobDefaults(req *models.JobRequest) {
+	req.PythonPath = firstNonEmpty(req.PythonPath, os.Getenv("ETL_PYTHON_PATH"), os.Getenv("PYSPARK_PYTHON"), defaultPythonPath)
+	req.ScriptsPath = firstNonEmpty(req.ScriptsPath, os.Getenv("SCRIPTS_PATH"), defaultScriptsPath)
+	req.JDBCPath = firstNonEmpty(req.JDBCPath, os.Getenv("JDBC_DRIVER_PATH"), defaultJDBCPath)
+	req.OutputDir = firstNonEmpty(req.OutputDir, os.Getenv("OUTPUT_DIR"), defaultOutputDir)
+}
+
+func applyTestDefaults(req *models.TestConnectionRequest) {
+	req.PythonPath = firstNonEmpty(req.PythonPath, os.Getenv("ETL_PYTHON_PATH"), os.Getenv("PYSPARK_PYTHON"), defaultPythonPath)
+	req.ScriptsPath = firstNonEmpty(req.ScriptsPath, os.Getenv("SCRIPTS_PATH"), defaultScriptsPath)
+	req.JDBCPath = firstNonEmpty(req.JDBCPath, os.Getenv("JDBC_DRIVER_PATH"), defaultJDBCPath)
 }
 
 // runNormalization executes the normalization Python script
