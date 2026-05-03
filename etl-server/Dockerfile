@@ -24,7 +24,7 @@ WORKDIR /app
 # Install runtime dependencies (Java for Spark, curl for health checks)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
