@@ -283,26 +283,17 @@ func (e *Executor) runExtraction(req *models.JobRequest, start, end string) (str
 	return stagingPath, false, nil
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func applyJobDefaults(req *models.JobRequest) {
-	req.PythonPath = firstNonEmpty(req.PythonPath, os.Getenv("ETL_PYTHON_PATH"), os.Getenv("PYSPARK_PYTHON"), defaultPythonPath)
-	req.ScriptsPath = firstNonEmpty(req.ScriptsPath, os.Getenv("SCRIPTS_PATH"), defaultScriptsPath)
-	req.JDBCPath = firstNonEmpty(req.JDBCPath, os.Getenv("JDBC_DRIVER_PATH"), defaultJDBCPath)
-	req.OutputDir = firstNonEmpty(req.OutputDir, os.Getenv("OUTPUT_DIR"), defaultOutputDir)
+	req.PythonPath = defaultPythonPath
+	req.ScriptsPath = defaultScriptsPath
+	req.JDBCPath = defaultJDBCPath
+	req.OutputDir = defaultOutputDir
 }
 
 func applyTestDefaults(req *models.TestConnectionRequest) {
-	req.PythonPath = firstNonEmpty(req.PythonPath, os.Getenv("ETL_PYTHON_PATH"), os.Getenv("PYSPARK_PYTHON"), defaultPythonPath)
-	req.ScriptsPath = firstNonEmpty(req.ScriptsPath, os.Getenv("SCRIPTS_PATH"), defaultScriptsPath)
-	req.JDBCPath = firstNonEmpty(req.JDBCPath, os.Getenv("JDBC_DRIVER_PATH"), defaultJDBCPath)
+	req.PythonPath = defaultPythonPath
+	req.ScriptsPath = defaultScriptsPath
+	req.JDBCPath = defaultJDBCPath
 }
 
 // runNormalization executes the normalization Python script

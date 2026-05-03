@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	Version     = "1.0.0"
-	BuildDate   = "2026-02-28"
+	Version     = "1.0.1"
+	BuildDate   = "2026-05-03"
 	Description = "ETL Server - Standalone ETL Pipeline Executor"
 )
 
