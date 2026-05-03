@@ -1,0 +1,79 @@
+Notes, limitations & recommendations (short)
+
+Performance: this implementation uses pandas.read_parquet() and validates rows sequentially. It’s fine for small-to-moderate runs. For large volumes:
+
+Use chunked processing (read in row batches) or use a worker pool / multiprocessing map to validate in parallel.
+
+Or run this enrichment inside Spark using mapInPandas() or foreachPartition() so each Python worker loads fhir.resources once and processes many rows.
+
+Robustness: the commit pattern copies objects from _tmp to final and writes _SUCCESS. Consumers must only read runs with _SUCCESS.
+
+Deterministic IDs: we set Bundle.id deterministically if missing — good for idempotency. You can expand to set deterministic ids for nested resources too.
+
+Validation strictness: fhir.resources validates structure. For stricter HL7 compliance, run the HL7 FHIR Validator CLI as a post-check.
+
+Error handling / retries: consider retry/backoff for network operations (boto3 copy/upload) in production.
+
+Security: store MinIO credentials securely (env vars, vault).
+
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+def upload_file_retry(s3, local_file, bucket, key):
+    s3.upload_file(local_file, bucket, key)
+
+
+
+3. Centralized vs Separate Hive Metastore (catalogs)
+Centralized HMS
+
+Pros:
+
+Easy: one place to manage schemas/tables.
+
+Works nicely with Apache Ranger (since Ranger plugs into HMS for authorization).
+
+Makes cross-hospital queries simple later (Trino just sees one catalog).
+
+Cons:
+
+All table names/paths live in one Postgres DB.
+
+If someone gets access to the HMS DB, they can see table locations (but not the actual Parquet data unless they also have MinIO creds).
+
+Separate HMS (per hospital)
+
+Pros:
+
+Stronger isolation (each hospital only manages its own catalog).
+
+If one HMS is compromised, others are safe.
+
+Cons:
+
+Harder to manage at scale.
+
+Ranger integration becomes more complex (you’d need multiple policy servers or sync them).
+
+4. Security angle (your question about data breach)
+
+HMS does not store patient data — it only stores:
+
+table → location in MinIO
+
+schema (column names + types)
+
+So if someone compromises HMS, they see metadata, not the actual data.
+
+The real risk is MinIO access keys. As long as keys are locked down, HMS alone cannot expose sensitive records.
+
+👉 That means centralized HMS is usually fine — especially if you’re planning to add Apache Ranger later. Ranger policies apply at query-time (through Hive/Trino), so you can centrally control “Hospital B doctor can only query checkups from Hospital B, and only for last 7 days” etc.
+
+✅ My opinion for your case:
+Go with a centralized Hive Metastore + Postgres, then later integrate Ranger for fine-grained access. It will make your system simpler and still secure, since HMS stores no raw patient data. If regulations ever demand hospital-by-hospital isolation, you can still split catalogs later.
+
+
+
+Expire snapshots = Iceberg keeps all snapshots (old data + metadata) by default for time travel. expire_snapshots removes old snapshots + their orphaned files (after retention), to save storage. You can set retention like "keep last 7 days".
+
+Partitioning = must be defined at table creation (e.g. partitionedBy("ingest_date")). You can’t change it later, but you can create a new table with a different partitioning scheme if needed.

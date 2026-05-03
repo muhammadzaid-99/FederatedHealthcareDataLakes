@@ -1,0 +1,285 @@
+[
+  {
+    "resourceType": "Bundle",
+    "type": "collection",
+    "timestamp": "2025-09-01T10:00:00Z",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Patient",
+          "id": "uuid-1",
+          "name": [
+            {
+              "text": "Ali Khan"
+            }
+          ],
+          "gender": "male",
+          "extension": [
+            {
+              "url": "http://example.org/fhir/StructureDefinition/age",
+              "valueString": "32"
+            }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Encounter",
+          "id": "uuid-1",
+          "status": "finished",
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "participant": [
+            {
+              "individual": {
+                "reference": "Practitioner/doc-1"
+              }
+            }
+          ],
+          "period": {
+            "start": "2025-09-01T10:00:00Z"
+          },
+          "reasonReference": [
+            {
+              "display": "Upper respiratory infection"
+            }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Temperature"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "37.8"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Systolic blood pressure"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "120"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Diastolic blood pressure"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "80"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Blood sugar"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "110 mg/dL"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Body weight"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "65 kg"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Symptom"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "cough"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "status": "final",
+          "code": {
+            "text": "Symptom"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "valueString": "fever"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "clinicalStatus": {
+            "text": "active"
+          },
+          "code": {
+            "text": "Upper respiratory infection"
+          }
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "DocumentReference",
+          "type": {
+            "text": "Clinical note"
+          },
+          "content": [
+            {
+              "attachment": {
+                "data": null,
+                "title": "follow-up in 5 days"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationStatement",
+          "status": "active",
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "medicationCodeableConcept": {
+            "text": "Paracetamol 500mg BD"
+          }
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationStatement",
+          "status": "active",
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "medicationCodeableConcept": {
+            "text": "Azithromycin 250 mg"
+          }
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "id": "obs-1",
+          "status": "unknown",
+          "code": {
+            "text": "CBC"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          }
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Observation",
+          "id": "obs-2",
+          "status": "unknown",
+          "code": {
+            "text": "Glucose fasting"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          }
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "DiagnosticReport",
+          "status": "partial",
+          "code": {
+            "text": "Requested laboratory tests"
+          },
+          "subject": {
+            "reference": "Patient/uuid-1"
+          },
+          "effectiveDateTime": "2025-09-01T10:00:00Z",
+          "result": [
+            {
+              "reference": "Observation/obs-1"
+            },
+            {
+              "reference": "Observation/obs-2"
+            }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "DocumentReference",
+          "status": "current",
+          "type": {
+            "text": "Consultation audio"
+          },
+          "content": [
+            {
+              "attachment": {
+                "url": "http://audio.test/1.mp3"
+              }
+            }
+          ],
+          "subject": {
+            "reference": "Patient/uuid-1"
+          }
+        }
+      }
+    ],
+    "meta": {
+      "original": {
+        "medications_raw": [
+          "Paracetamol 500mg BD",
+          "Azithromycin 250 mg"
+        ],
+        "lab_tests_raw": [
+          "CBC",
+          "Glucose fasting"
+        ],
+        "notes_raw": [
+          "follow-up in 5 days"
+        ]
+      }
+    }
+  }
+]
