@@ -118,22 +118,26 @@ services:
     #   - infra-net
 
   # ---------- ETL Server (Python/PySpark Job Runner) ----------
-  # etl-server:
-  #   build:
-  #     context: ../etl-server
-  #     dockerfile: Dockerfile
-  #   container_name: local-etl-server
-  #   environment:
-  #     ETL_SERVER_PORT: "9091"
-  #     ETL_SERVER_ENV: development
-  #     ETL_INTERNAL_API_KEY: dev-etl-api-key
-  #   ports:
-  #     - "9091:9091"
-  #   volumes:
-  #     # Mount the Python scripts so ETL server can execute them
-  #     - ../node-backend/scripts:/app/scripts:ro
-  #   networks:
-  #     - infra-net
+  etl-server:
+    build:
+      context: ..
+      dockerfile: etl-server/Dockerfile
+    container_name: local-etl-server
+    environment:
+      ETL_SERVER_PORT: "9091"
+      ETL_SERVER_ENV: development
+      ETL_INTERNAL_API_KEY: dev-etl-api-key
+    ports:
+      - "9091:9091"
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      nessie:
+        condition: service_healthy
+    # networks:
+    #   - infra-net
 
 volumes:
   minio_data:
