@@ -15,10 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { api, DataAccessRequest } from '@/lib/api'
+import { api, DataAccessRequest, Hospital, Requestor } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import {
-  FileText,
   AlertCircle,
   Search,
   RefreshCw,
@@ -37,6 +36,18 @@ function statusConfig(status: string) {
     case 'PENDING':
       return {
         label: 'Pending',
+        dot: 'bg-amber-400',
+        bg: 'bg-amber-50 border-amber-200/60 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300',
+      }
+    case 'FORWARDED':
+      return {
+        label: 'Forwarded',
+        dot: 'bg-blue-400',
+        bg: 'bg-blue-50 border-blue-200/60 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-300',
+      }
+    case 'PARTIAL_APPROVED':
+      return {
+        label: 'Partial Approved',
         dot: 'bg-amber-400',
         bg: 'bg-amber-50 border-amber-200/60 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300',
       }
@@ -64,6 +75,12 @@ function statusConfig(status: string) {
         dot: 'bg-indigo-400',
         bg: 'bg-indigo-50 border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300',
       }
+    case 'EXPIRED':
+      return {
+        label: 'Expired',
+        dot: 'bg-slate-400',
+        bg: 'bg-slate-50 border-slate-200/60 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300',
+      }
     default:
       return {
         label: status,
@@ -83,13 +100,31 @@ export default function RequestsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [hospitalMap, setHospitalMap] = useState<Record<string, Hospital>>({})
+  const [requestorMap, setRequestorMap] = useState<Record<string, Requestor>>({})
 
   const loadRequests = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true)
       setError('')
-      const data = await api.getDataAccessRequests()
+      const [data, hospitals, requestors] = await Promise.all([
+        api.getDataAccessRequests(),
+        api.getAllHospitals(),
+        api.getAllRequestors(),
+      ])
       setRequests(data)
+      setHospitalMap(
+        hospitals.reduce((acc: Record<string, Hospital>, hospital: Hospital) => {
+          acc[hospital.id] = hospital
+          return acc
+        }, {})
+      )
+      setRequestorMap(
+        requestors.reduce((acc: Record<string, Requestor>, requestor: Requestor) => {
+          acc[requestor.id] = requestor
+          return acc
+        }, {})
+      )
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -104,13 +139,18 @@ export default function RequestsPage() {
 
   /* ---- search filter ---- */
   const q = searchTerm.toLowerCase()
-  const filteredRequests = requests.filter(
-    (req) =>
+  const filteredRequests = requests.filter((req) => {
+    const requestor = requestorMap[req.requestor_id]
+    const requestorName = requestor?.name || ''
+    const requestorOrg = requestor?.organization || ''
+    return (
       (req.requestor_id?.toLowerCase() ?? '').includes(q) ||
       (req.requestor_email?.toLowerCase() ?? '').includes(q) ||
-      (req.purpose?.toLowerCase() ?? '').includes(q) ||
+      requestorName.toLowerCase().includes(q) ||
+      requestorOrg.toLowerCase().includes(q) ||
       (req.status?.toLowerCase() ?? '').includes(q)
-  )
+    )
+  })
 
   /* ---- response stats helper ---- */
   const getResponseStats = (request: DataAccessRequest) => {
@@ -164,7 +204,7 @@ export default function RequestsPage() {
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
-          placeholder="Search by name, email, purpose or status…"
+          placeholder="Search by requestor, email, org or status..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="h-10 rounded-lg border-slate-200 bg-white pl-10 text-sm shadow-sm placeholder:text-slate-400 focus-visible:ring-violet-500 dark:border-slate-700 dark:bg-slate-900"
@@ -227,9 +267,6 @@ export default function RequestsPage() {
                       Requester
                     </TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Purpose
-                    </TableHead>
-                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Hospitals
                     </TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -248,6 +285,13 @@ export default function RequestsPage() {
                   {filteredRequests.map((request) => {
                     const stats = getResponseStats(request)
                     const sc = statusConfig(request.status)
+                    const requestor = requestorMap[request.requestor_id]
+                    const requestorName = requestor?.name || request.requestor_email || request.requestor_id || 'Unknown'
+                    const requestorOrg = requestor?.organization
+                    const hospitalLabels = request.requested_nodes?.map((nodeId) => {
+                      const hospital = hospitalMap[nodeId]
+                      return hospital?.name || nodeId
+                    }) || []
 
                     return (
                       <TableRow
@@ -259,40 +303,39 @@ export default function RequestsPage() {
                         <TableCell className="pl-6">
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white shadow-sm">
-                              {(request.requestor_id?.[0] ?? '?').toUpperCase()}
+                              {(requestorName?.[0] ?? '?').toUpperCase()}
                             </div>
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">
-                                {request.requestor_id}
+                                {requestorName}
                               </p>
-                              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                                {request.requestor_email}
-                              </p>
+                              {requestorOrg ? (
+                                <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                  {requestorOrg}
+                                </p>
+                              ) : (
+                                <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                  {request.requestor_email}
+                                </p>
+                              )}
                             </div>
                           </div>
-                        </TableCell>
-
-                        {/* Purpose */}
-                        <TableCell className="max-w-[220px]">
-                          <p className="truncate text-sm text-slate-600 dark:text-slate-300">
-                            {request.purpose}
-                          </p>
                         </TableCell>
 
                         {/* Hospitals (node pills) */}
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {request.requested_nodes?.slice(0, 2).map((nodeId) => (
+                            {hospitalLabels.slice(0, 2).map((label) => (
                               <span
-                                key={nodeId}
+                                key={label}
                                 className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"
                               >
-                                {nodeId.length > 10 ? `${nodeId.substring(0, 8)}…` : nodeId}
+                                {label.length > 18 ? `${label.substring(0, 18)}...` : label}
                               </span>
                             ))}
-                            {(request.requested_nodes?.length ?? 0) > 2 && (
+                            {hospitalLabels.length > 2 && (
                               <span className="inline-flex items-center rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-600 ring-1 ring-inset ring-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-800">
-                                +{request.requested_nodes!.length - 2}
+                                +{hospitalLabels.length - 2}
                               </span>
                             )}
                           </div>

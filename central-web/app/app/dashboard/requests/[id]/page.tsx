@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { api, DataAccessRequest, NodeAccessResponse } from '@/lib/api'
+import { api, DataAccessRequest, NodeAccessResponse, Requestor } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -25,7 +25,6 @@ import {
   ChevronDown,
   ChevronRight,
   User,
-  FileText,
   Database,
   Eye,
   EyeOff,
@@ -38,6 +37,14 @@ import {
 function statusBadge(status: string) {
   const s = status.toUpperCase()
   const map: Record<string, { label: string; cls: string }> = {
+    FORWARDED: {
+      label: 'Forwarded',
+      cls: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800',
+    },
+    PARTIAL_APPROVED: {
+      label: 'Partial Approved',
+      cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
+    },
     APPROVED: {
       label: 'Approved',
       cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
@@ -57,6 +64,10 @@ function statusBadge(status: string) {
     PROCESSING: {
       label: 'Processing',
       cls: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800',
+    },
+    EXPIRED: {
+      label: 'Expired',
+      cls: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
     },
   }
   const entry = map[s] ?? {
@@ -149,6 +160,7 @@ export default function RequestDetailsPage() {
   const requestId = params.id as string
 
   const [request, setRequest] = useState<DataAccessRequest | null>(null)
+  const [requestorDetails, setRequestorDetails] = useState<Requestor | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedResponses, setExpandedResponses] = useState<Set<string>>(new Set())
@@ -164,6 +176,13 @@ export default function RequestDetailsPage() {
       setError('')
       const data = await api.getRequestById(requestId)
       setRequest(data)
+      try {
+        const requestors = await api.getAllRequestors()
+        const match = requestors.find((r) => r.id === data.requestor_id)
+        setRequestorDetails(match || null)
+      } catch {
+        setRequestorDetails(null)
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -237,6 +256,11 @@ export default function RequestDetailsPage() {
     )
   }
 
+  const requestorName =
+    requestorDetails?.name || request.requestor_email || request.requestor_id
+  const requestorEmail = requestorDetails?.email || request.requestor_email
+  const requestorOrg = requestorDetails?.organization
+
   /* ── main content ── */
   return (
     <div className="max-w-5xl mx-auto space-y-8 py-2">
@@ -255,7 +279,10 @@ export default function RequestDetailsPage() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
               Request Details
             </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Requested by {requestorName}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-mono mt-1">
               {request.id}
             </p>
           </div>
@@ -285,29 +312,39 @@ export default function RequestDetailsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">ID</p>
-              <p className="text-sm font-mono text-slate-700 dark:text-slate-300 mt-0.5">{request.requestor_id}</p>
+              <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Name</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{requestorName}</p>
             </div>
             <div>
               <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Email</p>
-              <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{request.requestor_email}</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{requestorEmail}</p>
             </div>
+            {requestorOrg && (
+              <div>
+                <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Organization</p>
+                <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{requestorOrg}</p>
+              </div>
+            )}
             <div>
-              <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Purpose</p>
-              <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5 leading-relaxed">{request.purpose}</p>
+              <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Requestor ID</p>
+              <p className="text-sm font-mono text-slate-700 dark:text-slate-300 mt-0.5">{request.requestor_id}</p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Timeline / dates */}
+        {/* Timeline / request summary */}
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-800 dark:text-slate-200">
               <Timer className="h-4 w-4 text-violet-500" />
-              Timeline
+              Request Summary
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Purpose</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5 leading-relaxed">{request.purpose}</p>
+            </div>
             <div>
               <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Created</p>
               <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{formatDate(request.created_at)}</p>
@@ -315,22 +352,6 @@ export default function RequestDetailsPage() {
             <div>
               <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider">Expires</p>
               <p className="text-sm text-slate-700 dark:text-slate-300 mt-0.5">{formatDate(request.expires_at)}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase text-slate-400 dark:text-slate-500 tracking-wider mb-1.5">
-                Target Hospitals ({request.requested_nodes?.length || 0})
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {request.requested_nodes?.map((nodeId) => (
-                  <Badge
-                    key={nodeId}
-                    variant="outline"
-                    className="text-xs font-mono bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800"
-                  >
-                    {nodeId}
-                  </Badge>
-                ))}
-              </div>
             </div>
           </CardContent>
         </Card>

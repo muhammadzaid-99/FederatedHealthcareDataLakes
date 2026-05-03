@@ -5,15 +5,12 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api, Hospital, DataAccessRequest } from '@/lib/api'
+import { api, Hospital, DataAccessRequest, Requestor } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import {
   Building2,
   Clock,
   FileText,
-  Users,
-  CheckCircle,
-  XCircle,
   ArrowRight,
   TrendingUp,
 } from 'lucide-react'
@@ -21,6 +18,8 @@ import {
 export default function DashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [hospitalMap, setHospitalMap] = useState<Record<string, Hospital>>({})
+  const [requestorMap, setRequestorMap] = useState<Record<string, Requestor>>({})
   const [stats, setStats] = useState({
     totalHospitals: 0,
     pendingRegistrations: 0,
@@ -35,13 +34,27 @@ export default function DashboardPage() {
 
   const loadStats = async () => {
     try {
-      const [hospitals, pending, requests] = await Promise.all([
+      const [hospitals, pending, requests, requestors] = await Promise.all([
         api.getAllHospitals(),
         api.getPendingRegistrations(),
         api.getDataAccessRequests(),
+        api.getAllRequestors(),
       ])
 
       const approved = hospitals.filter((h: Hospital) => h.status === 'approved' || h.status === 'CREDENTIALS_ISSUED' || h.status === 'ACTIVE')
+
+      const hospitalsById = hospitals.reduce((acc: Record<string, Hospital>, hospital: Hospital) => {
+        acc[hospital.id] = hospital
+        return acc
+      }, {})
+
+      const requestorsById = requestors.reduce((acc: Record<string, Requestor>, requestor: Requestor) => {
+        acc[requestor.id] = requestor
+        return acc
+      }, {})
+
+      setHospitalMap(hospitalsById)
+      setRequestorMap(requestorsById)
 
       setStats({
         totalHospitals: hospitals.length,
@@ -94,8 +107,12 @@ export default function DashboardPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status?.toLowerCase()) {
-      case 'completed':
-        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Completed</Badge>
+      case 'forwarded':
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100">Forwarded</Badge>
+      case 'partial_approved':
+        return <Badge className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100">Partial Approved</Badge>
+      case 'approved':
+        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Approved</Badge>
       case 'rejected':
         return <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Rejected</Badge>
       case 'pending':
@@ -103,6 +120,8 @@ export default function DashboardPage() {
         return <Badge className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100">Pending</Badge>
       case 'processing':
         return <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100">Processing</Badge>
+      case 'expired':
+        return <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">Expired</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
@@ -219,40 +238,49 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {stats.recentRequests.map((request) => (
-                <div
-                  key={request.id}
-                  onClick={() => router.push(`/dashboard/requests/${request.id}`)}
-                  className="group flex items-center justify-between rounded-xl border border-slate-200 p-4 hover:bg-slate-50 hover:border-violet-200 cursor-pointer transition-all"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium text-slate-900 truncate">{request.requestor_id || 'Unknown'}</p>
-                      {request.requestor_email && (
-                        <span className="text-xs text-slate-400 truncate">{request.requestor_email}</span>
-                      )}
+              {stats.recentRequests.map((request) => {
+                const requestor = requestorMap[request.requestor_id]
+                const requestorName = requestor?.name || request.requestor_email || request.requestor_id || 'Unknown'
+                const requestorOrg = requestor?.organization
+                const hospitalLabels = request.requested_nodes?.map((nodeId) => {
+                  const hospital = hospitalMap[nodeId]
+                  return hospital?.name || nodeId
+                }) || []
+
+                return (
+                  <div
+                    key={request.id}
+                    onClick={() => router.push(`/dashboard/requests/${request.id}`)}
+                    className="group flex items-center justify-between rounded-xl border border-slate-200 p-4 hover:bg-slate-50 hover:border-violet-200 cursor-pointer transition-all"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium text-slate-900 truncate">{requestorName}</p>
+                        {requestorOrg && (
+                          <span className="text-xs text-slate-400 truncate">{requestorOrg}</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {hospitalLabels.slice(0, 3).map((label) => (
+                          <span
+                            key={label}
+                            className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full"
+                          >
+                            {label.length > 18 ? `${label.substring(0, 18)}...` : label}
+                          </span>
+                        ))}
+                        {hospitalLabels.length > 3 && (
+                          <span className="text-[11px] text-slate-400">+{hospitalLabels.length - 3} more</span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-slate-500 truncate">{request.purpose}</p>
-                    <div className="flex gap-1.5 mt-2">
-                      {request.requested_nodes?.slice(0, 2).map((nodeId) => (
-                        <span
-                          key={nodeId}
-                          className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full"
-                        >
-                          {nodeId.substring(0, 8)}...
-                        </span>
-                      ))}
-                      {request.requested_nodes && request.requested_nodes.length > 2 && (
-                        <span className="text-[11px] text-slate-400">+{request.requested_nodes.length - 2} more</span>
-                      )}
+                    <div className="flex items-center gap-3 ml-4 shrink-0">
+                      {getStatusBadge(request.status)}
+                      <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-violet-500 transition-colors" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 ml-4 shrink-0">
-                    {getStatusBadge(request.status)}
-                    <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-violet-500 transition-colors" />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
