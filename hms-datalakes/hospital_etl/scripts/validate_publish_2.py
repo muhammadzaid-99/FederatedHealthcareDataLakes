@@ -230,7 +230,11 @@ def _validate_partition_rows(
                 if r.get("resourceType") == "Encounter" and not r.get("id"):
                     r["id"] = uid
 
-            Bundle.model_validate(bundle_dict)
+            # Pydantic v2 uses model_validate; v1 uses parse_obj
+            if hasattr(Bundle, "model_validate"):
+                Bundle.model_validate(bundle_dict)
+            else:
+                Bundle.parse_obj(bundle_dict)
 
             out["fhir_bundle_json"] = json.dumps(bundle_dict, default=str)
             out["fhir_validation_status"] = "VALID"
