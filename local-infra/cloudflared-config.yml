@@ -14,6 +14,15 @@ credentials-file: /home/muhammad-zaid/.cloudflared/6b1ec657-b947-45aa-bfc7-d6c00
 # Force HTTP/2 (TCP) instead of QUIC (UDP) — QUIC is blocked on some networks
 protocol: http2
 
+# Force IPv4 only — IPv6 fails with permission denied (GID not in ping_group_range)
+edge-ip-version: "4"
+
+# Grace period before cloudflared exits on shutdown (prevents request drops)
+grace-period: 30s
+
+# Reduce log noise from retries
+# loglevel: warn
+
 ingress:
   - hostname: minio-h1.healthlake.tech
     service: http://localhost:9000
