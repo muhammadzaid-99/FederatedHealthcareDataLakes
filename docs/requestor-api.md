@@ -1,28 +1,25 @@
-# Requestor API — Frontend Developer Reference
+# Requestor API
 
 **Base URL:** `http://<host>/api/v1`
 
-**Auth mechanism:** Cookie-based. After login, the server sets an `httpOnly` cookie called `requestor_token`. Every subsequent request automatically carries it. You do **not** read, store, or manually attach this cookie — the browser handles it.
+**Auth mechanism:** Cookie-based. After login, the server sets an `httpOnly` cookie called `requestor_token`. Every subsequent request automatically carries it. You do **not** read, store, or manually attach this cookie. The browser handles it.
 
-> **Important:** Every `fetch` call must include `credentials: 'include'`  
-> Every axios call must include `withCredentials: true`
+Every `fetch` call must include `credentials: 'include'`, and every axios call must include
+`withCredentials: true`.
 
 ---
 
-## Typical User Flow
+## Typical flow
 
-```
-Register → Wait for admin approval → Login → Browse hospitals →
-Create access request → Wait for hospital approval →
-Use approved responses to run queries
-```
+Register, wait for admin approval, log in, browse hospitals, create an access request, wait
+for each hospital to approve it, then use the approved responses to run queries.
 
 ---
 
 ## 1. Authentication
 
 ### Register
-**`POST /requestors/register`** — public
+**`POST /requestors/register`** (public)
 
 Creates a new account. Status starts as `PENDING`. The account cannot log in until an admin approves it.
 
@@ -52,12 +49,12 @@ Creates a new account. Status starts as `PENDING`. The account cannot log in unt
 ```
 
 **Errors:**
-- `400` — missing/invalid fields, or email already registered
+- `400`: missing or invalid fields, or email already registered
 
 ---
 
 ### Login
-**`POST /auth/requestor/login`** — public
+**`POST /auth/requestor/login`** (public)
 
 Authenticates the user and sets the session cookie. Only accounts with status `APPROVED` can log in.
 
@@ -84,12 +81,12 @@ Authenticates the user and sets the session cookie. Only accounts with status `A
 ```
 
 **Errors:**
-- `401` — wrong credentials, or account not yet approved
+- `401`: wrong credentials, or account not yet approved
 
 ---
 
 ### Logout
-**`POST /auth/requestor/logout`** — 🔒 requires login
+**`POST /auth/requestor/logout`** (requires login)
 
 Clears the session cookie.
 
@@ -103,7 +100,7 @@ Clears the session cookie.
 ## 2. Profile
 
 ### Get my profile
-**`GET /requestor/me`** — 🔒 requires login
+**`GET /requestor/me`** (requires login)
 
 Returns the logged-in requestor's own details.
 
@@ -127,7 +124,7 @@ Returns the logged-in requestor's own details.
 ## 3. Hospitals
 
 ### List active hospitals
-**`GET /requestor/hospitals`** — 🔒 requires login
+**`GET /requestor/hospitals`** (requires login)
 
 Returns all hospitals currently available for data access requests. Use this to populate the hospital selection list on the new request form.
 
@@ -151,7 +148,7 @@ Returns all hospitals currently available for data access requests. Use this to 
 
 A data access request is a formal ask to one or more hospitals: "I want access to these departments' data, for this purpose."
 
-Each hospital responds independently — one request can have multiple per-hospital responses.
+Each hospital responds independently, so one request can have multiple per-hospital responses.
 
 ### Possible request statuses
 
@@ -169,13 +166,13 @@ Each hospital responds independently — one request can have multiple per-hospi
 | Status | Meaning |
 |--------|---------|
 | `PENDING` | Hospital has not responded yet |
-| `APPROVED` | Hospital granted access — this response can be used for queries |
+| `APPROVED` | Hospital granted access, so this response can be used for queries |
 | `REJECTED` | Hospital denied access |
 
 ---
 
 ### Create a request
-**`POST /requestor/requests`** — 🔒 requires login
+**`POST /requestor/requests`** (requires login)
 
 **Request body:**
 ```json
@@ -189,10 +186,10 @@ Each hospital responds independently — one request can have multiple per-hospi
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `requested_nodes` | ✅ | Array of hospital UUIDs from `GET /requestor/hospitals`. Min 1. |
-| `departments` | ✅ | Array of department names. Min 1. |
-| `purpose` | ✅ | Free text description of why you need the data. |
-| `expires_in` | ❌ | How many days the request stays valid. Defaults to `30`. |
+| `requested_nodes` | yes | Array of hospital UUIDs from `GET /requestor/hospitals`. Min 1. |
+| `departments` | yes | Array of department names. Min 1. |
+| `purpose` | yes | Free text description of why you need the data. |
+| `expires_in` | no | How many days the request stays valid. Defaults to `30`. |
 
 **Success `201`:**
 ```json
@@ -212,12 +209,12 @@ Each hospital responds independently — one request can have multiple per-hospi
 ```
 
 **Errors:**
-- `400` — missing fields, or one of the hospital UUIDs is not valid/active
+- `400`: missing fields, or one of the hospital UUIDs is not valid or not active
 
 ---
 
 ### List my requests
-**`GET /requestor/requests`** — 🔒 requires login
+**`GET /requestor/requests`** (requires login)
 
 Returns all requests belonging to the logged-in requestor. Includes the per-hospital response list in each request.
 
@@ -268,7 +265,7 @@ Returns all requests belonging to the logged-in requestor. Includes the per-hosp
 ---
 
 ### Get a single request
-**`GET /requestor/requests/:id`** — 🔒 requires login
+**`GET /requestor/requests/:id`** (requires login)
 
 Same shape as one item from the list above. Returns `404` if the request doesn't belong to the logged-in user.
 
@@ -278,14 +275,14 @@ Same shape as one item from the list above. Returns `404` if the request doesn't
 
 This is a two-step process:
 
-**Step 1** — Call `GET /requestor/approved-access` to find which hospitals have approved you and what they approved (departments + date range). This populates your query form.
+**Step 1.** Call `GET /requestor/approved-access` to find which hospitals have approved you and what they approved (departments + date range). This populates your query form.
 
-**Step 2** — Call `POST /requestor/query` with what you want to query. The server validates your access, builds the query safely, and runs it.
+**Step 2.** Call `POST /requestor/query` with what you want to query. The server validates your access, builds the query safely, and runs it.
 
 ---
 
 ### Get approved access
-**`GET /requestor/approved-access`** — 🔒 requires login
+**`GET /requestor/approved-access`** (requires login)
 
 Returns every `APPROVED` hospital response across all of the requestor's requests. These are the only hospitals the requestor is allowed to query.
 
@@ -316,7 +313,7 @@ Returns every `APPROVED` hospital response across all of the requestor's request
 ---
 
 ### Execute a query
-**`POST /requestor/query`** — 🔒 requires login
+**`POST /requestor/query`** (requires login)
 
 The server builds and executes the query. You never write SQL. You specify which approved responses to query, which departments, and an optional date range. The server enforces that you can only query what was approved for you.
 
@@ -345,14 +342,14 @@ The server builds and executes the query. You never write SQL. You specify which
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `table_name` | ✅ | e.g. `checkups`. Letters and underscores only. |
-| `columns` | ❌ | Specific columns to fetch. Omit or send `[]` for all columns. |
-| `limit` | ❌ | Max rows to return. Server caps at `1000`. Defaults to `1000`. |
-| `selections` | ✅ | One entry per hospital you want data from. Min 1. |
-| `selections[].access_response_id` | ✅ | The `id` from `GET /requestor/approved-access`. |
-| `selections[].departments` | ✅ | Must be a subset of what was approved for that response. |
-| `selections[].date_range_start` | ❌ | `YYYY-MM-DD`. Leave empty to use the hospital's approved range start. |
-| `selections[].date_range_end` | ❌ | `YYYY-MM-DD`. Leave empty to use the hospital's approved range end. |
+| `table_name` | yes | e.g. `checkups`. Letters and underscores only. |
+| `columns` | no | Specific columns to fetch. Omit or send `[]` for all columns. |
+| `limit` | no | Max rows to return. A value outside 1 to 10000 is replaced with `1000`. |
+| `selections` | yes | One entry per hospital you want data from. Min 1. |
+| `selections[].access_response_id` | yes | The `id` from `GET /requestor/approved-access`. |
+| `selections[].departments` | yes | Must be a subset of what was approved for that response. |
+| `selections[].date_range_start` | no | `YYYY-MM-DD`. Leave empty to use the hospital's approved range start. |
+| `selections[].date_range_end` | no | `YYYY-MM-DD`. Leave empty to use the hospital's approved range end. |
 
 **Success `200`:**
 ```json
@@ -369,10 +366,10 @@ The server builds and executes the query. You never write SQL. You specify which
 
 `rows` is a 2D array. Each inner array maps index-for-index to `columns`:
 ```
-rows[0][0] → patient_id    = "P001"
-rows[0][1] → department_name = "Cardiology"
-rows[0][2] → checkup_date  = "2024-07-15"
-rows[0][3] → diagnosis     = "Hypertension"
+rows[0][0] -> patient_id    = "P001"
+rows[0][1] -> department_name = "Cardiology"
+rows[0][2] -> checkup_date  = "2024-07-15"
+rows[0][3] -> diagnosis     = "Hypertension"
 ```
 
 To convert to an array of objects for table rendering:
@@ -383,7 +380,7 @@ const records = result.rows.map(row =>
 ```
 
 **Errors:**
-- `400` — invalid table/column name, `access_response_id` not found or not yours, department not in approved set, date out of approved range
+- `400`: invalid table or column name, `access_response_id` not found or not yours, department not in approved set, date out of approved range
 
 ---
 
@@ -392,19 +389,19 @@ const records = result.rows.map(row =>
 These three endpoints let you browse available tables and columns to help populate the query form. All return immediately.
 
 #### List schemas
-**`GET /requestor/schemas`** — 🔒 requires login
+**`GET /requestor/schemas`** (requires login)
 ```json
 { "catalog": "iceberg", "schemas": ["hospital_ns1::keyA", "hospital_ns2::keyB"] }
 ```
 
 #### List tables in a schema
-**`GET /requestor/schemas/:schema/tables`** — 🔒 requires login
+**`GET /requestor/schemas/:schema/tables`** (requires login)
 ```json
 { "schema": "hospital_ns1::keyA", "tables": ["checkups"] }
 ```
 
 #### List columns in a table
-**`GET /requestor/schemas/:schema/tables/:table/columns`** — 🔒 requires login
+**`GET /requestor/schemas/:schema/tables/:table/columns`** (requires login)
 ```json
 {
   "schema": "hospital_ns1::keyA",
@@ -430,7 +427,7 @@ All errors follow the same shape:
 
 | HTTP Code | Meaning |
 |-----------|---------|
-| `400` | Bad input — check `error` message |
+| `400` | Bad input, check the `error` message |
 | `401` | Not logged in, or account not approved |
 | `403` | Logged in but not allowed to do this |
 | `404` | Resource not found (or doesn't belong to you) |

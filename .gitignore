@@ -194,3 +194,15 @@ docker-compose.override.yml
 !.editorconfig
 !.prettierrc
 !.eslintrc*
+
+##########################################################
+# ETL OUTPUT - Generated data, never commit
+##########################################################
+parquet/
+*/parquet/
+hms-datalakes/hospital_etl/load_json/
+*.parquet
+*.crc
+_SUCCESS
+__pycache__/
+*.py[cod]
