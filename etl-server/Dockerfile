@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies for ETL scripts
-# These are required by hospital_etl scripts (extract2.py, fhir_transform.py, validate_publish.py)
+# These are required by hospital_etl scripts (extract.py, fhir_transform.py, validate_publish.py)
 RUN pip install --no-cache-dir \
     pyspark==3.5.0 \
     boto3==1.26.139 \
@@ -50,11 +50,10 @@ COPY --from=builder /build/etl-server /app/
 # This allows the COPY commands below to find scripts from the root context:
 COPY hms-datalakes/hospital_etl/scripts/ /app/scripts/
 
-# Copy JDBC driver for PostgreSQL connectivity
-COPY hms-datalakes/hospital_etl/postgresql-42.7.7.jar /app/
-
-# Copy sample config (can be overridden via volume mount or env vars)
-COPY hms-datalakes/hospital_etl/config.json /app/config/
+# PostgreSQL JDBC driver, fetched at build time rather than committed to the repository
+ARG PG_JDBC_VERSION=42.7.7
+RUN curl -fsSL -o /app/postgresql-${PG_JDBC_VERSION}.jar \
+    https://repo1.maven.org/maven2/org/postgresql/postgresql/${PG_JDBC_VERSION}/postgresql-${PG_JDBC_VERSION}.jar
 
 # Set environment variables for Python and Spark
 # These ensure Spark workers use the same Python environment as the driver

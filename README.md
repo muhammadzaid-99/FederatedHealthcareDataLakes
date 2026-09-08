@@ -1,21 +1,28 @@
 # Federated Data Lakes for Healthcare Centres
 
-A system that lets an approved researcher run a single SQL query across several hospitals
-at once, without any hospital ever handing over a copy of its data.
+A federated data lake that lets an approved researcher run a single SQL query across
+several hospitals at once, without any hospital handing over a copy of its data.
 
-Each hospital keeps its own database and its own object storage. A central service handles
-identity, access requests and approvals, and issues nothing more than short lived,
-narrowly scoped credentials when a hospital says yes. Queries execute against the
+Healthcare in Pakistan runs on disconnected systems. Records sit in separate hospital
+platforms, so there is no unified view for research or for planning and oversight. The
+usual fix is to copy everything into one central warehouse, which asks every hospital to
+give up custody of its own records, and that is normally where the idea stops. This project
+takes the other route: the data stays on the hospital's own infrastructure, and what moves
+between institutions is permission rather than records.
+
+Each hospital keeps its own database and its own object storage, publishes its records as
+FHIR R5 in an open table format, and decides for itself who may read which parts of them. A
+central service holds identity, the hospital registry, and access requests, and stores no
+clinical records at all. When a hospital approves a request, it issues nothing more than
+short lived credentials scoped to exactly what was approved. Queries execute against the
 hospitals' own storage, and results come back combined.
 
-It is a final year project. The upstream clinical schema it ingests from is modeled on
+Every component of the stack is open source and runs under Docker, so a hospital can run
+its side on its own hardware rather than depending on a managed cloud service. It is a
+final year project, and the upstream clinical schema it ingests from is modeled on
 Pakistani hospital records, using CNIC as the patient identifier.
 
 ## Overview
-
-The usual way to query data from many organizations is to copy it all into one warehouse.
-For hospital records that is often the part nobody will agree to. This project takes the
-other route: the data stays where it is, and what moves is permission.
 
 There are three parties.
 
@@ -23,7 +30,7 @@ There are three parties.
   It publishes its clinical records into an Apache Iceberg table inside its own bucket, and
   decides case by case who may read which parts of it.
 - The **central plane** knows which hospitals exist, who is asking for data, and which
-  requests have been approved. It stores no clinical records at all.
+  requests have been approved. It never sees the records themselves.
 - A **requestor**, typically a researcher, asks specific hospitals for specific departments
   over a specific date range, and once approved can query exactly that and nothing more.
 
@@ -229,7 +236,7 @@ dashboard, and follow the walkthrough in the setup guide.
 
 You need Docker, Go 1.25 or newer, and Node.js 18 or newer. Java, Python and Spark are only
 needed inside the `etl-server` image, which builds from the repository root because it
-copies the pipeline scripts and the JDBC driver out of `hms-datalakes/`.
+copies the pipeline scripts out of `hms-datalakes/`.
 
 The Go services and the frontends are commented out in `docker-compose.yml` and run from
 source, which is how they were developed.
@@ -260,7 +267,7 @@ Two things are worth knowing before the first run:
 | `node-backend/` | Hospital node service. STS policy building, request sync, ETL scheduling |
 | `node-web/` | Next.js hospital operator UI |
 | `etl-server/` | Go job runner and its combined Go, Python and Spark image |
-| `hms-datalakes/hospital_etl/` | PySpark pipeline scripts, MinIO policies, JDBC driver |
+| `hms-datalakes/hospital_etl/` | PySpark pipeline scripts and MinIO policies |
 | `prisma/` | Upstream hospital management schema and seed data |
 | `trino/`, `local-infra/`, `nessie-heroku/` | Trino catalog and node config, the tunneled local stack, and the Nessie deployment image |
 | `docs/` | Architecture, setup, ETL pipeline, and the requestor API reference |

@@ -30,7 +30,7 @@ polls `etl-server` until the job finishes, so runs are incremental and do not ov
 environment and reading a JSON summary from each script's stdout. Spark and Ivy write
 noise to stdout, so the validation stage's output is parsed from the first `{` onward.
 
-### 1. Extraction, `extract2.py`
+### 1. Extraction, `extract.py`
 
 Arguments are the start and end of the window in ISO 8601. Spark reads over the PostgreSQL
 JDBC driver, filtered on `checkup_created_at`, and writes Snappy compressed Parquet to a
@@ -46,7 +46,7 @@ columns including `checkup_id`, `department_name`, `patient_dob`, and JSONB `pre
 and `test_recommendations`. The view is defined in the hospital's own system, not in this
 repository; `prisma/prisma/schema.prisma` describes the underlying tables it is built from.
 
-### 2. Transformation, `fhir_transform_2.py`
+### 2. Transformation, `fhir_transform.py`
 
 Arguments are the staging path and the output path. Spark UDFs build one FHIR R5 `Bundle`
 per checkup, containing `Patient`, `AllergyIntolerance`, `Condition`, `Encounter` (with
@@ -55,7 +55,7 @@ symptoms, `DocumentReference`, `ClinicalImpression`, `MedicationRequest`, and
 `DiagnosticReport`. Rows with no department are given `unassigned` so that the partition
 column is never null.
 
-### 3. Validation and publication, `validate_publish_2.py`
+### 3. Validation and publication, `validate_publish.py`
 
 Arguments are the start date, end date, normalized path, and validated output path. Each
 bundle is parsed and validated with `fhir.resources` and pydantic inside
@@ -103,8 +103,10 @@ Configuration comes from `ETL_SERVER_PORT` (default `9091`), `ETL_SERVER_ENV`, a
 
 The `etl-server` image is a Go build stage plus a `python:3.11-slim` runtime with
 OpenJDK 21, and it installs `pyspark`, `boto3`, `fhir.resources`, `pydantic` and `pandas`.
-It copies the Python scripts and the PostgreSQL JDBC driver out of
-`hms-datalakes/hospital_etl/`, so it must be built from the repository root:
+It copies the Python scripts out of `hms-datalakes/hospital_etl/scripts/`, so it must be
+built from the repository root. The PostgreSQL JDBC driver is downloaded from Maven Central
+during the build rather than committed to the repository; the version is the
+`PG_JDBC_VERSION` build argument.
 
 ```bash
 docker build -f etl-server/Dockerfile -t etl-server:latest .

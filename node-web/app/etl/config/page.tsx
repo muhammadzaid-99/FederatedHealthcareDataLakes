@@ -79,17 +79,14 @@ const DEFAULT_CONFIG: ETLConfig = {
   minio_access_key: "etluser",
   minio_secret_key: "",
   minio_bucket: "hospital-data",
-  python_path: "/home/muhammad-zaid/myenv/bin/python",
-  scripts_path:
-    "/home/muhammad-zaid/Documents/hms_fyp/hms-dls2/node-backend/scripts",
-  jdbc_path:
-    "/home/muhammad-zaid/Documents/hms_fyp/hms-dls2/node-backend/scripts/postgresql-42.7.7.jar",
+  python_path: "/usr/local/bin/python",
+  scripts_path: "/app/scripts",
+  jdbc_path: "/app/postgresql-42.7.7.jar",
   schedule_enabled: false,
   schedule_type: "frequency",
   frequency_seconds: 300,
   cron_expression: "",
-  output_dir:
-    "/home/muhammad-zaid/Documents/hms_fyp/hms-dls2/node-backend/parquet",
+  output_dir: "/app/parquet",
   departments: ["cardiology", "neurology"],
   enrichment_version: "v1",
 };

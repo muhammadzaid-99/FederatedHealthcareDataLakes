@@ -9,7 +9,7 @@
 # ==============================================================================
 
 tunnel: REDACTED-TUNNEL-ID
-credentials-file: /home/muhammad-zaid/.cloudflared/REDACTED-TUNNEL-ID.json
+credentials-file: ${HOME}/.cloudflared/<tunnel-id>.json
 
 # Force HTTP/2 (TCP) instead of QUIC (UDP) — QUIC is blocked on some networks
 protocol: http2

@@ -228,7 +228,7 @@ func (e *Executor) executeJob(job *models.Job, req *models.JobRequest) {
 
 // runExtraction executes the extraction Python script
 func (e *Executor) runExtraction(req *models.JobRequest, start, end string) (string, bool, error) {
-	scriptPath := filepath.Join(req.ScriptsPath, "extract2.py")
+	scriptPath := filepath.Join(req.ScriptsPath, "extract.py")
 
 	cmd := exec.Command(req.PythonPath, scriptPath, start, end)
 
@@ -298,7 +298,7 @@ func applyTestDefaults(req *models.TestConnectionRequest) {
 
 // runNormalization executes the normalization Python script
 func (e *Executor) runNormalization(req *models.JobRequest, stagingPath string) (string, error) {
-	scriptPath := filepath.Join(req.ScriptsPath, "fhir_transform_2.py")
+	scriptPath := filepath.Join(req.ScriptsPath, "fhir_transform.py")
 
 	normalizedPath := filepath.Join(filepath.Dir(filepath.Dir(stagingPath)), "normalized", filepath.Base(stagingPath))
 
@@ -327,7 +327,7 @@ func (e *Executor) runNormalization(req *models.JobRequest, stagingPath string) 
 
 // runValidationAndPublish executes the validation and publish Python script
 func (e *Executor) runValidationAndPublish(req *models.JobRequest, start, end, normalizedPath string) (string, int, int, error) {
-	scriptPath := filepath.Join(req.ScriptsPath, "validate_publish_2.py")
+	scriptPath := filepath.Join(req.ScriptsPath, "validate_publish.py")
 
 	validatedPath := filepath.Join(filepath.Dir(filepath.Dir(normalizedPath)), "validated", filepath.Base(normalizedPath))
 

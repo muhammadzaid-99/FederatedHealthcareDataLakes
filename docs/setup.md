@@ -43,7 +43,7 @@ docker compose -f docker-compose.etl.yml --env-file .env.etl up -d
 This starts the hospital's source PostgreSQL (5435), MinIO (9000, console on 9001), a MinIO
 client container that creates the `hospital-data` and `hospital-metadata` buckets, and
 `etl-server` (9091). The `etl-server` image builds from the repository root because it
-copies the Python scripts and the JDBC driver out of `hms-datalakes/hospital_etl/`.
+copies the Python scripts out of `hms-datalakes/hospital_etl/scripts/`.
 
 ```bash
 curl http://localhost:9091/health

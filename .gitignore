@@ -206,3 +206,23 @@ hms-datalakes/hospital_etl/load_json/
 _SUCCESS
 __pycache__/
 *.py[cod]
+
+##########################################################
+# COMPILED GO BINARIES - Build them, do not commit them
+##########################################################
+central-backend/server
+central-backend/central-control
+central-proxy/server
+central-proxy/central-proxy
+node-backend/server
+etl-server/server
+
+##########################################################
+# THIRD PARTY JARS - Fetched at build time
+##########################################################
+*.jar
+
+##########################################################
+# TYPESCRIPT BUILD CACHE
+##########################################################
+*.tsbuildinfo
