@@ -1,4 +1,4 @@
-# Federated Hospital Data Lake
+# Federated Data Lakes for Healthcare Centres
 
 A system that lets an approved researcher run a single SQL query across several hospitals
 at once, without any hospital ever handing over a copy of its data.
